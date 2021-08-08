@@ -1,0 +1,15 @@
+baseURL = '/'
+languageCode = 'zh-Hans'
+hasCJKLanguage = true
+title = 'Shoujo/Ink'
+relativeURLs = true
+theme = ['kagami']
+disableLiveReload = true
+
+[permalinks]
+posts = '/:year/:month/:slug'
+
+[outputs]
+home = ['html', 'json', 'rss']
+section = ['html', 'json']
+page = ['html', 'json']
