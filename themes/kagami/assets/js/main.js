@@ -9,7 +9,7 @@ __)| |(_)|_|_| (_)/  _|_| | |<
 document.body.style.opacity = '1'
 
 import { html, render } from 'https://unpkg.com/lit-html?module'
-import { wrapperTpl, headerTpl, navTpl, postsListTpl, postTpl } from './layout'
+import { wrapperTpl, headerTpl, navTpl, postsListTpl, postTpl, footerTpl } from './layout'
 
 let siteData = await (await fetch('/index.json')).json()
 let inited = window.inited
@@ -42,6 +42,7 @@ const template = (data) => html`
     ${navTpl(data.pages)} ${data.page.post ? postTpl(data.site, data.page) : ''}
     ${data.page.kind == 'section' ? html` ${headerTpl(data.site, data.page)} ${postsListTpl(data.page?.posts)} ` : ''}
   `)}
+  ${footerTpl()}
 `
 
 // Render the template to the document

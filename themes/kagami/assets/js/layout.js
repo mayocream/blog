@@ -58,3 +58,29 @@ export const postsListTpl = (posts) => html`
     )}
   </ul>
 `
+
+export const footerTpl = () => html`
+<footer class="site-footer">
+
+<div class="wrapper">
+  <div class="social-links">
+    <a class="social-link social-github" href="https://github.com/mayocream">
+      <i class="icon-github"></i>
+    </a>
+    <!-- <a class="social-link social-twitter" href="https://twitter.com/{{ site.twitter_username }}">
+      <i class="icon-twitter"></i>
+    </a> -->
+    <!-- <a class="social-link social-instagram" href="https://instagram.com/{{ site.instagram_username }}">
+      <i class="icon-instagram"></i>
+    </a> -->
+    <a class="social-link social-rss" href="/index.xml" target="_blank">
+      <i class="icon-rss"></i>
+    </a>
+  </div>
+  <div class="credits">
+    KAGAMI, made with <span style="font-size: 1.4em">♥</span> by Kamikat
+  </div>
+</div>
+
+</footer>
+`
