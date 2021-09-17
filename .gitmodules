@@ -1,3 +1,6 @@
 [submodule "content/posts"]
 	path = content/posts
 	url = git@github.com:mayocream/Articles.git
+[submodule "themes/axiom"]
+	path = themes/axiom
+	url = git@github.com:haya14busa/axiom.git

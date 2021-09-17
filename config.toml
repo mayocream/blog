@@ -1,15 +1,9 @@
 baseURL = '/'
-languageCode = 'zh-Hans'
+languageCode = 'zh'
 hasCJKLanguage = true
-title = 'Shoujo/Ink'
-relativeURLs = true
-theme = ['kagami']
-disableLiveReload = true
+title = "Mayo's Blog"
+theme = "axiom"
+defaultContentLanguage = "zh"
 
 [permalinks]
-posts = '/:year/:month/:slug'
-
-[outputs]
-home = ['html', 'json', 'rss']
-section = ['html', 'json']
-page = ['html', 'json']
+posts = "/posts/:slug"
