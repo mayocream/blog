@@ -6,4 +6,4 @@ theme = "axiom"
 defaultContentLanguage = "zh"
 
 [permalinks]
-posts = "/posts/:slug"
+posts = "/:year/:month/:slug"

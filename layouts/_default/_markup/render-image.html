@@ -1,0 +1,5 @@
+{{- $images := .Page.Resources.Match .Destination}}
+{{- $image := (index $images 0)}}
+<p class="md__image">
+  <img src="{{ $image.RelPermalink | safeURL }}" alt="{{ .Text }}" loading="lazy" />
+</p>
