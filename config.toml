@@ -1,13 +1,14 @@
 baseURL = '/'
-languageCode = 'zh'
 hasCJKLanguage = true
 title = "Mayo's Blog"
 theme = "axiom"
-defaultContentLanguage = "zh"
 
-paginate = 20
+languageCode = "en-us"
+defaultContentLanguage = "en"
+
+paginate = 10
 canonifyURLs = false
-summaryLength = 40
+# summaryLength = 40
 rssLimit = 100
 enableEmoji = true
 enableRobotsTXT = true
@@ -18,7 +19,7 @@ posts = "/:year/:month/:slug"
 
 [params]
 mainSections = ["posts"]
-copyrightYear = 2021
+copyrightYear = 2020
 disableThemeAttribution = true
 # Go Reference time: Mon Jan 2 15:04:05 MST 2006
 dateFormat = "Jan 2, 2006 3:04PM"
@@ -26,10 +27,15 @@ highlight = "dark"
 # contentEditBaseURL = "https://github.com/haya14busa/haya14busa.dev/blob/master/content/"
 # discussionDefaultURL = "https://github.com/haya14busa/haya14busa.dev/discussions/categories/posts"
 
+[params.brand]
+# Just domain name, no www
+domain = "example.com"
+# Contact email address
+email = "info@example.com"
+
 [taxonomies]
 tag = "tags"
 
-[menu]
 [[menu.main]]
 url = "/posts/"
 name = "Posts"
@@ -45,8 +51,6 @@ url = "/about/"
 name = "About"
 weight = 2
 
-[markup]
-[markup.goldmark]
 [markup.goldmark.extensions]
 definitionList = false
 footnote = true
@@ -63,3 +67,6 @@ attribute = false
 codeFences = true
 noClasses = false
 tabWidth = 4
+
+[languages.zh]
+[languages.en]
