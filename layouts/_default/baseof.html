@@ -1,0 +1,45 @@
+{{- $imgFavIconIco := partial "cdn-src" (dict "Site" $.Site "Page" . "src" .Site.Params.image.faviconIco) -}}
+{{- $imgFavIconAlt := partial "cdn-src" (dict "Site" $.Site "Page" . "src" .Site.Params.image.faviconAlt) -}}
+{{- $imgAppIcon := partial "cdn-src" (dict "Site" $.Site "Page" . "src" .Site.Params.image.icon1To1) -}}
+{{- $langCode := .Site.LanguageCode | default "en-us" -}}
+<!doctype html>
+<html lang="{{ $langCode }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no">
+  {{- partial "meta-theme" . }}
+  {{- partial "google-tag-manager-head" . }}
+
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ $imgFavIconAlt }}">
+  <link rel="icon" type="image/x-icon" href="{{ $imgFavIconIco }}">
+  <link rel="apple-touch-icon" href="{{ $imgAppIcon }}">
+
+  {{- with .Permalink }}
+  <link rel="canonical" href="{{ . }}">
+  {{- end }}
+
+  {{- range .AlternativeOutputFormats }}
+  {{ printf `<link rel="%s" type="%s" href="%s" hreflang="%s">` .Rel .MediaType.Type .Permalink $langCode | safeHTML }}
+  {{- end }}
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin> 
+  
+  {{- partial "styles-app" . }}
+  {{- partial "styles-type" . }}
+  {{- partial "structured-data" . }}
+  {{- partial "bundle-js-preload" . }}
+  {{- partial "google-analytics" . }}
+</head>
+<body>
+  {{- partial "google-tag-manager-body" . }}
+  {{ partial "header" . }}
+  <main>
+  {{- block "main" . }}{{ end }}
+  </main>
+  {{ partial "footer" . }}
+  {{- partial "bundle-js" . }}
+  {{- partial "google-adsense" . }}
+  {{- partial "facebook-pixel" . }}
+</body>
+</html>

@@ -1,4 +1,4 @@
-baseURL = '/'
+baseURL = 'https://shoujo.ink'
 hasCJKLanguage = true
 title = "Mayo's Blog"
 theme = "axiom"
@@ -22,16 +22,24 @@ mainSections = ["posts"]
 copyrightYear = 2020
 disableThemeAttribution = true
 # Go Reference time: Mon Jan 2 15:04:05 MST 2006
-dateFormat = "Jan 2, 2006 3:04PM"
+dateFormat = "2006-01-02"
 highlight = "dark"
 # contentEditBaseURL = "https://github.com/haya14busa/haya14busa.dev/blob/master/content/"
 # discussionDefaultURL = "https://github.com/haya14busa/haya14busa.dev/discussions/categories/posts"
 
+[params.social]
+github = "https://github.com/mayocream"
+atom-feed = "/feed.atom"
+footer = ["github", "atom-feed"]
+
+[params.share]
+enable = ["twitter"]
+
 [params.brand]
 # Just domain name, no www
-domain = "example.com"
+domain = "shoujo.ink"
 # Contact email address
-email = "info@example.com"
+email = "i@shoujo.io"
 
 [taxonomies]
 tag = "tags"
@@ -67,6 +75,3 @@ attribute = false
 codeFences = true
 noClasses = false
 tabWidth = 4
-
-[languages.zh]
-[languages.en]
