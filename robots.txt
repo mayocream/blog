@@ -1,4 +1,4 @@
 User-agent: *
 Disallow:
 
-Sitemap: https://shoujo.ink/sitemap.xml
+Sitemap: https://mayocream.github.io/blog/sitemap.xml
