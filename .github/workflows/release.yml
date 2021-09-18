@@ -1,12 +1,9 @@
-name: Pages
+name: Release Pages
 
 on:
   push:
-    branches:
-      - master  # Set a branch name to trigger deployment
     tags:
       - v*
-  pull_request:
 
 jobs:
   deploy:
@@ -30,9 +27,9 @@ jobs:
       - name: Build
         run: make
 
-      - name: Deploy Pages
+      - name: Deploy Cloudflare Pages
         uses: peaceiris/actions-gh-pages@v3
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./public
+          publish_branch: cf-pages
