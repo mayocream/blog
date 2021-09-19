@@ -1,39 +1,44 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans&family=Noto+Sans+JP&family=Noto+Sans+SC:wght@100;300;400&family=Noto+Serif&family=Noto+Serif+JP&family=Noto+Serif+SC&family=Source+Sans+Pro&family=Roboto+Mono&family=Roboto:wght@100;300;400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans&family=Noto+Sans+JP&family=Noto+Sans+SC:wght@100;300;400&family=Noto+Serif&family=Noto+Serif+JP&family=Noto+Serif+SC&family=Source+Sans+Pro&family=Roboto+Mono&family=Roboto:wght@100;300;400&family=Source+Code+Pro&display=swap');
 
 :root {
-    --zh-font: 'Noto Sans SC', sans-serif;
-    --zh-font-serif: 'Noto Serif SC', serif;
-    --ja-font: 'Noto Sans JP', sans-serif;
-    --ja-font-serif: 'Noto Serif JP', serif;
-    --en-font: 'Roboto', sans-serif;
-    --en-font-serif: serif;
-    --mono-font: 'Roboto Mono', inherit, monospace;
+  --zh-font: 'Noto Sans SC', sans-serif;
+  --zh-font-serif: 'Noto Serif SC', serif;
+  --ja-font: 'Noto Sans JP', sans-serif;
+  --ja-font-serif: 'Noto Serif JP', serif;
+  --en-font: 'Roboto', sans-serif;
+  --en-font-serif: serif;
+  --mono-font: 'Source Code Pro', inherit, monospace;
 }
 
-:lang(zh) {
-    font-family: var(--zh-font);
+[lang|='zh'] {
+  font-family: var(--zh-font);
 }
 
-:lang(zh).ax-content{
-    font-family: var(--zh-font);
+[lang|='zh'].ax-content {
+  font-family: var(--zh-font);
 }
 
-:lang(ja).ax-content {
-    font-family: var(--ja-font);
+[lang|='ja'].ax-content {
+  font-family: var(--ja-font);
 }
 
-:lang(en).ax-content, :lang(en-us).ax-content {
-    font-family: var(--en-font);
+[lang|='en'].ax-content,
+[lang|='en'].ax-content {
+  font-family: var(--en-font);
 }
 
-:lang(zh).font-content-title {
-    font-family: var(--zh-font-serif);
+[lang|='zh'].font-content-title {
+  font-family: var(--zh-font-serif);
 }
 
-:lang(ja).font-content-title {
-    font-family: var(--ja-font-serif);
+[lang|='ja'].font-content-title {
+  font-family: var(--ja-font-serif);
 }
 
-:lang(en).font-content-title {
-    font-family: var(--en-font-serif);
+[lang|='en'].font-content-title {
+  font-family: var(--en-font-serif);
+}
+
+pre code {
+  font-family: var(--mono-font);
 }
