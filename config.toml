@@ -1,77 +1,38 @@
 baseURL = 'https://shoujo.ink'
 hasCJKLanguage = true
 title = "Mayo's Blog"
-theme = "axiom"
+theme = "kagami"
 
-languageCode = "en-us"
-defaultContentLanguage = "en"
+languageCode = "zh-Hans"
 
 paginate = 10
-canonifyURLs = false
-# summaryLength = 40
-rssLimit = 100
 enableEmoji = true
-enableRobotsTXT = true
-pluralizelisttitles = false
 
 [permalinks]
 posts = "/:year/:month/:slug"
 
 [params]
 mainSections = ["posts"]
-copyrightYear = 2020
-disableThemeAttribution = true
-# Go Reference time: Mon Jan 2 15:04:05 MST 2006
-dateFormat = "2006-01-02"
-highlight = "dark"
-# contentEditBaseURL = "https://github.com/haya14busa/haya14busa.dev/blob/master/content/"
-# discussionDefaultURL = "https://github.com/haya14busa/haya14busa.dev/discussions/categories/posts"
+description = "Mayo's Blog"
+title = "Mayo's Blog"
 
 [params.social]
-github = "https://github.com/mayocream"
-atom-feed = "/feed.atom"
-footer = ["github", "atom-feed"]
+github = "mayocream"
+twitter = "Freeze_Mayo"
 
-[params.share]
-enable = ["twitter"]
+[[menu.main]]
+name = "About"
+url = "/about/"
+weight = 2
 
-[params.brand]
-# Just domain name, no www
-domain = "shoujo.ink"
-# Contact email address
-email = "i@shoujo.io"
+[[menu.main]]
+name = "Posts"
+url = "/posts/"
+weight = 1
 
 [taxonomies]
 tag = "tags"
+series = "series"
 
-[[menu.main]]
-url = "/posts/"
-name = "Posts"
-weight = 1
-
-[[menu.foot]]
-url = "/posts/"
-name = "Posts"
-weight = 1
-
-[[menu.foot]]
-url = "/about/"
-name = "About"
-weight = 2
-
-[markup.goldmark.extensions]
-definitionList = false
-footnote = true
-linkify = true
-strikethrough = true
-table = true
-taskList = true
-typographer = false
-[markup.goldmark.renderer]
-unsafe = true
-[markup.goldmark.parser]
-attribute = false
 [markup.highlight]
-codeFences = true
-noClasses = false
-tabWidth = 4
+codeFences = false

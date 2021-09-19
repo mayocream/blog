@@ -4,3 +4,6 @@
 [submodule "themes/axiom"]
 	path = themes/axiom
 	url = git@github.com:mayocream/axiom.git
+[submodule "themes/kagami"]
+	path = themes/kagami
+	url = git@github.com:mayocream/hugo-theme-kagami.git
