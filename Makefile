@@ -3,7 +3,7 @@ hugo:
 	hugo --minify --buildFuture
 
 preview:
-	hugo server
+	hugo server --buildFuture
 
 dep:
 	cd themes/kagami && git pull
