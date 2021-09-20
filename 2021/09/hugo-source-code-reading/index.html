@@ -3,22 +3,22 @@
 <meta http-equiv=x-ua-compatible content="IE=edge">
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Hugo 源码阅读 - Mayo's Blog</title>
-<meta name=description content="WIP 一、概述 1.1 目录结构 &mldr; 二、程序流程 2.1 流程定义 2.1.1 错误状态码 func main() { resp := commands.Execute(os.Args[1:]) if resp.Err != nil { if resp.IsUserError() { resp.Cmd.Println(&#34;&#34;) resp.Cmd.Println(resp.Cmd.UsageString()) } os.Exit(-1) } } os.Exit(-1) 程序的退出状态码不在 0~255 之间，会自动做转换，">
+<meta name=description content="1. 概述 这篇源码阅读编写于去年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发">
 <meta name=author content>
 <link rel=preconnect href=https://cdn.jsdelivr.net>
 <link rel=preconnect href=https://fonts.googleapis.com>
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/blog/bundle.css?v=1632150967" media=all>
+<link rel=stylesheet href="/blog/bundle.css?v=1632158232" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=/favicon.ico><meta name=generator content="Hugo 0.88.1">
-<link rel=canonical href=https://mayocream.github.io/blog/2020/12/hugo-source-code-reading/><meta property="og:title" content="Hugo 源码阅读">
-<meta property="og:description" content="WIP 一、概述 1.1 目录结构 &mldr; 二、程序流程 2.1 流程定义 2.1.1 错误状态码 func main() { resp := commands.Execute(os.Args[1:]) if resp.Err != nil { if resp.IsUserError() { resp.Cmd.Println(&#34;&#34;) resp.Cmd.Println(resp.Cmd.UsageString()) } os.Exit(-1) } } os.Exit(-1) 程序的退出状态码不在 0~255 之间，会自动做转换，">
+<link rel=canonical href=https://mayocream.github.io/blog/2021/09/hugo-source-code-reading/><meta property="og:title" content="Hugo 源码阅读">
+<meta property="og:description" content="1. 概述 这篇源码阅读编写于去年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发">
 <meta property="og:type" content="article">
-<meta property="og:url" content="https://mayocream.github.io/blog/2020/12/hugo-source-code-reading/"><meta property="article:section" content="posts">
-<meta property="article:published_time" content="2020-12-10T00:00:00+00:00">
-<meta property="article:modified_time" content="2020-12-10T00:00:00+00:00"><meta property="og:site_name" content="Mayo's Blog">
+<meta property="og:url" content="https://mayocream.github.io/blog/2021/09/hugo-source-code-reading/"><meta property="article:section" content="posts">
+<meta property="article:published_time" content="2021-09-21T00:00:00+00:00">
+<meta property="article:modified_time" content="2021-09-21T00:00:00+00:00"><meta property="og:site_name" content="Mayo's Blog">
 </head>
 </html>
 <body><script src=https://cdn.jsdelivr.net/npm/darkmode-js@1.5.7/lib/darkmode-js.min.js></script>
@@ -40,15 +40,41 @@
 <div class=post-layout>
 <article class="post typeface-sans" lang=zh itemscope itemtype=http://schema.org/BlogPosting>
 <div class=post-content itemprop=articleBody>
-<blockquote>
-<p>WIP</p>
-</blockquote>
-<h2 id=一概述>一、概述</h2>
-<h3 id=11-目录结构>1.1 目录结构</h3>
-<p>&mldr;</p>
-<h2 id=二程序流程>二、程序流程</h2>
-<h3 id=21-流程定义>2.1 流程定义</h3>
-<h4 id=211-错误状态码>2.1.1 错误状态码</h4>
+<h2 id=1-概述>1. 概述</h2>
+<p>这篇源码阅读编写于去年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发现代码量巨大，而且内部实现逻辑较为复杂，在这里也只对部分逻辑进行了梳理（只是冰山一角）。</p>
+<p>我阅读并作出中文注释的 Commits 可以在这里看到：
+<a href="https://github.com/mayocream/hugo/commits?author=mayocream">https://github.com/mayocream/hugo/commits?author=mayocream</a></p>
+<p>阅读源码的过程中也当 typofix 机器人提了 <a href=https://github.com/gohugoio/hugo/pull/8034>PR</a>，毕竟自己确实没有能贡献的地方。不过阅读源码并注释帮助理解，方便整理也是一个好习惯，在工作中我逐渐学会了。</p>
+<p>根据 <a href=https://en.wikipedia.org/wiki/Hugo_(software)>Wikipedia</a> 的记载，Hugo 早在 2013 年就发布了，直到去年我一直没有使用过，可能是它没有官方的中文文档，Go 语言对当时我也太生疏，而且 Hugo 的模板语法和 Hexo 与 Jekyll 也不一样，而且官方推荐用 Theme 的方式是 Git Submodule，相比于 Hexo 上手难度还是高一些。</p>
+<p>现在作为使用者来说，Hugo 使用的 Go 模板语法很好用，Hugo 基于模板的 Pipeline 实现的数据预处理也非常方便，用了就停不下来了。而且基于 <a href=https://github.com/evanw/esbuild>esbuild</a> 的打包使得静态资源的构建也很方便，终于脱离 Webpack 了。我还有一个弃坑的项目 <a href=https://github.com/mayocream/material-design-blog>material-design-blog</a> 也是使用的 Snowpack (esbuild) 进行静态资源的打包，不知道都已经是 2021 年末了，为什么公司的那群人还要使用 Webpack 缓慢地构建呢。</p>
+<p>Hugo 现在基本上 Github 上开源项目文档发布的标配，不过 Cloudflare 的开发者文档是使用 <a href=https://www.gatsbyjs.com/>Gatsby</a> 发布的，可能 Cloudflare 内部 JavaScript 用得也多吧，Worker 对于 Go 就<a href=https://community.cloudflare.com/t/native-golang-support-for-workers/65896>没有原生支持</a>。</p>
+<p>在使用过程中我还是尽量克制自己使用 Hugo <a href=https://gohugo.io/content-management/shortcodes/>Shortcodes</a>，一个 Markdown 文档应该保持纯净，除了 Markdown 扩展语法以外都不要使用，需要特殊实现的也使用原生 HTML 标签，这样方便将写作和 Blog 发布分离。</p>
+<p>我自己用在 <a href=https://github.com/mayocream/Translations>Translations</a> 项目中的 Hugo 的 Shortcode 是：</p>
+<pre><code class=language-html>&lt;figure class=&quot;manga&quot;&gt;
+    &lt;img src=&quot;https://cdn.jsdelivr.net/gh/mayocream/Translations@gh-pages/raw/{{ .Get &quot;src&quot; }}&quot; alt=&quot;&quot; loading=&quot;lazy&quot;&gt;
+    &lt;figcaption&gt;{{ .Get &quot;alt&quot; }}&lt;/figcaption&gt;
+&lt;/figure&gt;
+</code></pre>
+<p>为了利用上 Figure 标签与 jsDelivr 的 CDN，使用了 Shortcode，不过该项目中采用 Hugo 是专门为了进行发布管理的，关于这个如果我还有时间做更多翻译的话，可能会写一篇文章来介绍翻译小工程的工作流 🤹。</p>
+<h3 id=11-目录结构>1.1. 目录结构</h3>
+<p>Hugo 的开发时间较早，所以目录结构较为分散，与 <a href=https://github.com/golang-standards/project-layout>Standard Go Project Layout</a> 差异较大，当然这个社区提出的目录规范建议，也存在着争议，不过 Google 的不少项目都是遵循这个规范的，例如 <a href=https://github.com/kubernetes/kubernetes>Kubernetes</a> 和 <a href=https://github.com/grpc/grpc-go>grpc-go</a>。</p>
+<pre><code class=language-bash>$ tree -L 1 -d
+.
+├── commands   // CLI 入口, 解析 flags
+├── common     // 工具类
+├── hugofs     // FS 封装, 基于 afero/fs
+├── hugolib    // 程序主逻辑
+├── lazy       // 懒加载工具包
+├── livereload // Live 预览, 基于 Service Worker
+├── markup     // Markdown 解析相关
+├── parser     // 解析文件头
+...
+
+40 directories
+</code></pre>
+<h2 id=2-程序流程>2. 程序流程</h2>
+<h3 id=21-流程定义>2.1. 流程定义</h3>
+<h4 id=211-错误状态码>2.1.1. 错误状态码</h4>
 <pre><code class=language-go>func main() {
 	resp := commands.Execute(os.Args[1:])
 
@@ -61,7 +87,7 @@
 	}
 }
 </code></pre>
-<p><code>os.Exit(-1)</code> 程序的退出状态码不在 0~255 之间，会自动做转换，转换的规则如下[1]：</p>
+<p><code>os.Exit(-1)</code> 程序的退出状态码不在 0~255 之间，会自动做转换，转换的规则如下<sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup>：</p>
 <ul>
 <li>当指定的退出时状态码为负数:</li>
 </ul>
@@ -73,7 +99,7 @@
 <pre><code class=language-fallback>code % 256
 </code></pre>
 <p>由此程序退出的状态码为 255。</p>
-<h4 id=212-cli-命令>2.1.2 CLI 命令</h4>
+<h4 id=212-cli-命令>2.1.2. CLI 命令</h4>
 <pre><code class=language-go>// commands/commands.go
 func (b *commandsBuilder) addAll() *commandsBuilder {
    b.addCommands(
@@ -104,7 +130,7 @@ type cmder interface {
 </code></pre>
 <p>
 <figure class=image>
-<img src=/blog/2020/12/hugo-source-code-reading/images/hugo-impl.png alt loading=lazy>
+<img src=/blog/2021/09/hugo-source-code-reading/images/hugo-impl.png alt loading=lazy>
 </figure></p>
 <pre><code class=language-go>// commands/commands.go
 func (b *commandsBuilder) addAll() *commandsBuilder {
@@ -135,7 +161,7 @@ func (b *commandsBuilder) build() *hugoCmd {
 	return h
 }
 </code></pre>
-<h3 id=22-渲染初始化>2.2 渲染初始化</h3>
+<h3 id=22-渲染初始化>2.2. 渲染初始化</h3>
 <blockquote>
 <p>执行 Hugo 命令时进行的初始化加载</p>
 </blockquote>
@@ -179,7 +205,7 @@ Complete documentation is available at http://gohugo.io/.`,
    
     ...
 </code></pre>
-<h4 id=221-配置文件加载>2.2.1 配置文件加载</h4>
+<h4 id=221-配置文件加载>2.2.1. 配置文件加载</h4>
 <pre><code class=language-go>// hugolib/config.go
 
 	for _, configDir := range configDirs {
@@ -293,7 +319,7 @@ func createSitesFromConfig(cfg deps.DepsCfg) ([]*Site, error) {
 }
 </code></pre>
 <p>为每个语言生成一个 Site。</p>
-<h4 id=222-内容加载>2.2.2 内容加载</h4>
+<h4 id=222-内容加载>2.2.2. 内容加载</h4>
 <p>注册回调函数:</p>
 <pre><code class=language-go>// hugolib/site.go
 // 初始化
@@ -399,8 +425,8 @@ func (s *Site) prepareInits() {
 	})
 }
 </code></pre>
-<h2 id=三细枝末节>三、细枝末节</h2>
-<h3 id=31-interface-实现约束>3.1 interface 实现约束</h3>
+<h2 id=3-性能优化细节>3. 性能优化细节</h2>
+<h3 id=31-interface-实现约束>3.1. interface 实现约束</h3>
 <p>代码中有多处使用如下方式在编译时约束 interface 被实现。</p>
 <pre><code class=language-go>var _ cmder = (*newCmd)(nil)
 </code></pre>
@@ -408,7 +434,7 @@ func (s *Site) prepareInits() {
 <pre><code class=language-go>var _ cmder = &amp;newCmd{}
 var _ cmder = newCmd{}
 </code></pre>
-<h3 id=32-防抖>3.2 防抖</h3>
+<h3 id=32-防抖>3.2. 防抖</h3>
 <pre><code class=language-go>package debounce
 
 import (
@@ -452,7 +478,7 @@ run := debounce.New(f)
 run()
 </code></pre>
 <p>在 Istio 源码中，处理 XDS 推流时也会进行防抖处理。</p>
-<h3 id=32-lifo-队列>3.2 LIFO 队列</h3>
+<h3 id=32-lifo-队列>3.2. LIFO 队列</h3>
 <pre><code class=language-go>// LIFO 队列，溢出的元素会从顶部移除
 // 没有主动删除元素的方法
 // EvictingStringQueue is a queue which automatically evicts elements from the head of
@@ -546,13 +572,13 @@ func (q *EvictingStringQueue) PeekAllSet() map[string]bool {
 	return set
 }
 </code></pre>
-<h3 id=33-同步信号量>3.3 同步信号量</h3>
+<h3 id=33-同步信号量>3.3. 同步信号量</h3>
 <p><code>golang.org/x/sync/semaphore</code> 扩展同步原语。</p>
-<h3 id=34-command>3.4 Command</h3>
-<h4 id=341-cli-自动补全>3.4.1 CLI 自动补全</h4>
+<h3 id=34-command>3.4. Command</h3>
+<h4 id=341-cli-自动补全>3.4.1. CLI 自动补全</h4>
 <p>
 <figure class=image>
-<img src=/blog/2020/12/hugo-source-code-reading/images/hugo-cli.png alt loading=lazy>
+<img src=/blog/2021/09/hugo-source-code-reading/images/hugo-cli.png alt loading=lazy>
 </figure></p>
 <p>Hugo 的使用方式有两种：</p>
 <pre><code class=language-go>// &quot;-config&quot; flag 自动补全指定后缀文件名
@@ -561,8 +587,8 @@ _ = cc.cmd.PersistentFlags().SetAnnotation(&quot;config&quot;, cobra.BashCompFil
 // &quot;-source&quot; flag 自动补全子文件夹名
 cmd.PersistentFlags().SetAnnotation(&quot;source&quot;, cobra.BashCompSubdirsInDir, []string{})
 </code></pre>
-<h3 id=35-并发控制>3.5 并发控制</h3>
-<h4 id=351-缓冲通道控制并发>3.5.1 缓冲通道控制并发</h4>
+<h3 id=35-并发控制>3.5. 并发控制</h3>
+<h4 id=351-缓冲通道控制并发>3.5.1. 缓冲通道控制并发</h4>
 <pre><code class=language-go>// common/para/para.go
 // Package para implements parallel execution helpers.
 package para
@@ -640,11 +666,11 @@ func (w *Workers) Start(ctx context.Context) (Runner, context.Context) {
 	time.Sleep(2 * time.Second)
 }
 </code></pre>
-<h3 id=36-懒加载>3.6 懒加载</h3>
+<h3 id=36-懒加载>3.6. 懒加载</h3>
 <blockquote>
 <p>Lazy 包</p>
 </blockquote>
-<h4 id=361-oncemore>3.6.1 onceMore</h4>
+<h4 id=361-oncemore>3.6.1. onceMore</h4>
 <pre><code class=language-go>package lazy
 
 import (
@@ -706,7 +732,7 @@ func (t *onceMore) ResetWithLock() *sync.Mutex {
 }
 
 </code></pre>
-<h4 id=362-init>3.6.2 init</h4>
+<h4 id=362-init>3.6.2. init</h4>
 <pre><code class=language-go>package lazy
 
 import (
@@ -908,12 +934,18 @@ type verr struct {
 }
 
 </code></pre>
-<p>参考文章：</p>
-<p>[1] <a href=https://imroc.io/posts/kubernetes/analysis-exitcode/>Kubernetes 问题定位技巧：分析 ExitCode - imroc.io|roc的博客|Cloud Native|Kubernetes|Go|Golang</a></p>
+<section class=footnotes role=doc-endnotes>
+<hr>
+<ol>
+<li id=fn:1 role=doc-endnote>
+<p><a href=https://imroc.io/posts/kubernetes/analysis-exitcode/>Kubernetes 问题定位技巧：分析 ExitCode - imroc.io|roc的博客|Cloud Native|Kubernetes|Go|Golang</a>&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+</ol>
+</section>
 </div>
 <footer class=post-footer>
 <div class=post-meta>
-<time datetime=" 2020-12-10" itemprop=datePublished>Dec 10, 2020</time>
+<time datetime=" 2021-09-21" itemprop=datePublished>Sep 21, 2021</time>
 </div>
 </footer>
 </article>
