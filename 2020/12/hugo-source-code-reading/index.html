@@ -3,22 +3,22 @@
 <meta http-equiv=x-ua-compatible content="IE=edge">
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Hugo 源码阅读 - Mayo's Blog</title>
-<meta name=description content="1. 概述 这篇源码阅读编写于去年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发">
+<meta name=description content="这篇源码阅读编写于 2020 年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发现代码">
 <meta name=author content>
 <link rel=preconnect href=https://cdn.jsdelivr.net>
 <link rel=preconnect href=https://fonts.googleapis.com>
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1632165119" media=all>
+<link rel=stylesheet href="/bundle.css?v=1632170729" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=/favicon.ico><meta name=generator content="Hugo 0.88.1">
-<link rel=canonical href=https://shoujo.ink/2021/09/hugo-source-code-reading/><meta property="og:title" content="Hugo 源码阅读">
-<meta property="og:description" content="1. 概述 这篇源码阅读编写于去年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发">
+<link rel=canonical href=https://shoujo.ink/2020/12/hugo-source-code-reading/><meta property="og:title" content="Hugo 源码阅读">
+<meta property="og:description" content="这篇源码阅读编写于 2020 年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发现代码">
 <meta property="og:type" content="article">
-<meta property="og:url" content="https://shoujo.ink/2021/09/hugo-source-code-reading/"><meta property="article:section" content="posts">
-<meta property="article:published_time" content="2021-09-21T00:00:00+00:00">
-<meta property="article:modified_time" content="2021-09-21T00:00:00+00:00"><meta property="og:site_name" content="Mayo's Blog">
+<meta property="og:url" content="https://shoujo.ink/2020/12/hugo-source-code-reading/"><meta property="article:section" content="posts">
+<meta property="article:published_time" content="2020-12-10T00:00:00+00:00">
+<meta property="article:modified_time" content="2020-12-10T00:00:00+00:00"><meta property="og:site_name" content="Mayo's Blog">
 </head>
 </html>
 <body><script src=https://cdn.jsdelivr.net/npm/darkmode-js@1.5.7/lib/darkmode-js.min.js></script>
@@ -40,8 +40,8 @@
 <div class=post-layout>
 <article class="post typeface-sans" lang=zh itemscope itemtype=http://schema.org/BlogPosting>
 <div class=post-content itemprop=articleBody>
+<p>这篇源码阅读编写于 2020 年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发现代码量巨大，而且内部实现逻辑较为复杂，在这里也只对部分逻辑进行了梳理（只是冰山一角）。</p>
 <h2 id=1-概述>1. 概述</h2>
-<p>这篇源码阅读编写于去年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发现代码量巨大，而且内部实现逻辑较为复杂，在这里也只对部分逻辑进行了梳理（只是冰山一角）。</p>
 <p>我阅读并作出中文注释的 Commits 可以在这里看到：<br>
 <a href="https://github.com/mayocream/hugo/commits?author=mayocream">https://github.com/mayocream/hugo/commits?author=mayocream</a></p>
 <p>阅读源码的过程中也当 typofix 机器人提了 <a href=https://github.com/gohugoio/hugo/pull/8034>PR</a>，毕竟自己确实没有能贡献的地方。不过阅读源码并注释帮助理解，方便整理也是一个好习惯，在工作中我逐渐学会了。</p>
@@ -130,7 +130,7 @@ type cmder interface {
 </code></pre>
 <p>
 <figure class=image>
-<img src=/2021/09/hugo-source-code-reading/images/hugo-impl.png alt loading=lazy>
+<img src=/2020/12/hugo-source-code-reading/images/hugo-impl.png alt loading=lazy>
 </figure></p>
 <pre><code class=language-go>// commands/commands.go
 func (b *commandsBuilder) addAll() *commandsBuilder {
@@ -578,7 +578,7 @@ func (q *EvictingStringQueue) PeekAllSet() map[string]bool {
 <h4 id=341-cli-自动补全>3.4.1. CLI 自动补全</h4>
 <p>
 <figure class=image>
-<img src=/2021/09/hugo-source-code-reading/images/hugo-cli.png alt loading=lazy>
+<img src=/2020/12/hugo-source-code-reading/images/hugo-cli.png alt loading=lazy>
 </figure></p>
 <p>Hugo 的使用方式有两种：</p>
 <pre><code class=language-go>// &quot;-config&quot; flag 自动补全指定后缀文件名
@@ -945,7 +945,7 @@ type verr struct {
 </div>
 <footer class=post-footer>
 <div class=post-meta>
-<time datetime=" 2021-09-21" itemprop=datePublished>Sep 21, 2021</time>
+<time datetime=" 2020-12-10" itemprop=datePublished>Dec 10, 2020</time>
 </div>
 </footer>
 </article>
