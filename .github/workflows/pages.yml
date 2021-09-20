@@ -1,4 +1,4 @@
-name: Master Preview
+name: Pages
 
 on:
   push:
