@@ -21,5 +21,7 @@ date: "2021-09-21"
 
 Email: [mayo@shoujo.io](mailto:mayo@shoujo.io)
 
+License: [Creative Commons Attribution 4.0 International License](http://creativecommons.org/licenses/by/4.0/)
+
 [^1]: Canvas 绘制
 [^2]: https://github.com/mayocream/Translations
