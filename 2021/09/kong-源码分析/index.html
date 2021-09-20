@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1632170729" media=all>
+<link rel=stylesheet href="/bundle.css?v=1632171187" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=/favicon.ico><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://shoujo.ink/2021/09/kong-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/><meta property="og:title" content="Kong 源码分析">
@@ -47,6 +47,8 @@
 <p>继这篇文章之后，我还撰写了 Kong Ingress Controller 源码分析，后续还有 APISIX 的源码分析哦。</p>
 <h2 id=1-概述>1. 概述</h2>
 <p>本文针对的是 Kong 2.1 版本（Stable）。</p>
+<p>我阅读并作出中文注释的 Commits 可以在这里看到： <br>
+<a href="https://github.com/mayocream/kong/commits?author=huanghan39">https://github.com/mayocream/kong/commits?author=mayocream</a></p>
 <p><strong>Kong（OpenResty）的执行阶段</strong>：</p>
 <p>
 <figure class=image>
