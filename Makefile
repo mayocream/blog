@@ -1,6 +1,6 @@
 hugo:
 	rm -rf public
-	hugo --minify
+	hugo --minify --buildFuture
 
 preview:
 	hugo server
