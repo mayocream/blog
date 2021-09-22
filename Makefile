@@ -3,7 +3,7 @@ hugo:
 	hugo --minify --buildFuture
 
 preview:
-	hugo server --buildFuture
+	hugo server --buildFuture --disableFastRender
 
 dep:
 	cd themes/kagami && git pull
