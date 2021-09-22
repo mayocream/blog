@@ -8,6 +8,8 @@ languageCode = "zh-Hans"
 paginate = 10
 enableEmoji = true
 
+googleAnalytics = "G-JKVXF5HSKT"
+
 [permalinks]
 posts = "/:year/:month/:slug"
 
