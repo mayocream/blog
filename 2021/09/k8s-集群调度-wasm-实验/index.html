@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1632408647" media=all>
+<link rel=stylesheet href="/bundle.css?v=1632408837" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://unavatar.io/twitter/Freeze_Mayo><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://shoujo.ink/2021/09/k8s-%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6-wasm-%E5%AE%9E%E9%AA%8C/>
@@ -113,12 +113,12 @@ systemctl start krustlet.service
 <p>等待手动 Approve</p>
 <p>
 <figure class=image>
-<img src alt loading=lazy>
+<img src=/2021/09/k8s-%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6-wasm-%E5%AE%9E%E9%AA%8C/images/1.png alt loading=lazy>
 </figure></p>
 <p>程序正常启动</p>
 <p>
 <figure class=image>
-<img src alt loading=lazy>
+<img src=/2021/09/k8s-%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6-wasm-%E5%AE%9E%E9%AA%8C/images/2.png alt loading=lazy>
 </figure></p>
 <p>Krustlet 节点已加入集群</p>
 <ul>
@@ -424,7 +424,7 @@ status:
 </blockquote>
 <p>
 <figure class=image>
-<img src alt loading=lazy>
+<img src=/2021/09/k8s-%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6-wasm-%E5%AE%9E%E9%AA%8C/images/3.png alt loading=lazy>
 </figure></p>
 <p>“container-shim-wasm-v1” 作为 Containerd 的插件，利用 wasmer 作为 WASM 应用运行时环境，同时将其注册为 K8s 的一个 RuntimeClass ，利用 K8s 调度 WASM。</p>
 <h3 id=21-部署安装>2.1. 部署安装</h3>
@@ -455,7 +455,7 @@ nodes:
 </blockquote>
 <p>
 <figure class=image>
-<img src alt loading=lazy>
+<img src=/2021/09/k8s-%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6-wasm-%E5%AE%9E%E9%AA%8C/images/4.png alt loading=lazy>
 </figure></p>
 <p>Containerd 的 Runtime 会对应到 K8s 的 RuntimeClass。</p>
 <pre><code class=language-yaml>apiVersion: node.k8s.io/v1beta1
