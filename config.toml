@@ -17,7 +17,7 @@ posts = "/:year/:month/:slug"
 mainSections = ["posts"]
 description = "Mayo's Blog"
 title = "Mayo's Blog"
-favicon = "https://unavatar.io/twitter/Freeze_Mayo"
+favicon_url = "https://unavatar.io/twitter/Freeze_Mayo"
 
 [params.social]
 github = "mayocream"
