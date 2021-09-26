@@ -1,0 +1,245 @@
+<!doctype html><html lang=zh-hans><head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>海外 CDN 选型对比 - Mayo's Blog</title>
+<meta name=description content="1. 概述 1.1 定义简介 CDN（Content Delivery Network）内容分发网络，是构建在基础 IP 承载网络之上，具备内容自动化分布及流量集中化调度控制能力">
+<meta name=author content>
+<link rel=preconnect href=https://cdn.jsdelivr.net>
+<link rel=preconnect href=https://fonts.googleapis.com>
+<link rel=preconnect href=https://fonts.gstatic.com crossorigin>
+<link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
+<link rel=stylesheet href="/bundle.css?v=1632651926" media=all>
+<link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
+<link rel=icon href=https://unavatar.io/twitter/Freeze_Mayo><meta name=generator content="Hugo 0.88.1">
+<link rel=canonical href=https://shoujo.ink/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/>
+<script type=application/javascript>var doNotTrack=!1;doNotTrack||(window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)},ga.l=+new Date,ga('create','G-JKVXF5HSKT','auto'),ga('send','pageview'))</script>
+<script async src=https://www.google-analytics.com/analytics.js></script>
+<meta property="og:title" content="海外 CDN 选型对比">
+<meta property="og:description" content="1. 概述 1.1 定义简介 CDN（Content Delivery Network）内容分发网络，是构建在基础 IP 承载网络之上，具备内容自动化分布及流量集中化调度控制能力">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://shoujo.ink/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/"><meta property="article:section" content="posts">
+<meta property="article:published_time" content="2021-09-26T00:00:00+00:00">
+<meta property="article:modified_time" content="2021-09-26T00:00:00+00:00"><meta property="og:site_name" content="Mayo's Blog">
+</head>
+</html>
+<body><script src=https://cdn.jsdelivr.net/npm/darkmode-js@1.5.7/lib/darkmode-js.min.js></script>
+<script>const opts={bottom:'32px',right:'unset',left:'32px',time:'0.3s',mixColor:'#fff',backgroundColor:'#fff',buttonColorDark:'#100f2c',buttonColorLight:'#fff',saveInCookies:!0,label:'🌓',autoMatchOsTheme:!0};let darkmode;window.matchMedia('only screen and (min-width: 680px)').matches?(darkmode=new Darkmode(opts),darkmode.showWidget()):(localStorage.removeItem('darkmode'),darkmode=new Darkmode(opts)),window.darkmode=darkmode,document.addEventListener('DOMContentLoaded',function(){document.body.style.opacity=1})</script>
+<main class=page-content aria-label=Content>
+<div class=wrapper><nav class=site-nav>
+<a class=page-link href=/posts/>Posts</a>
+<a class=page-link href=/about/>About</a>
+</nav><header class=post-header>
+<a class=site-title href=https://shoujo.ink>Mayo's Blog</a>
+<h1 class="post-title baseline-fix typeface-serif" lang=zh-hans itemprop="name headline">海外 CDN 选型对比</h1>
+</header>
+<div class=post-cover aria-label=Cover>
+<div class=post-cover-wrapper>
+<img src alt>
+</div>
+<div class=cover-meta></div>
+</div>
+<div class=post-layout>
+<article class="post typeface-serif" lang=zh-hans itemscope itemtype=http://schema.org/BlogPosting>
+<div class=post-content itemprop=articleBody>
+<h2 id=1-概述>1. 概述</h2>
+<h3 id=11-定义简介>1.1 定义简介</h3>
+<p>CDN（Content Delivery Network）内容分发网络，是构建在基础 IP 承载网络之上，具备内容自动化分布及流量集中化调度控制能力的叠加网络。</p>
+<p>CDN 依靠部署在各地的边缘服务器（Edge Network），通过中心平台的负载均衡、内容分发、调度等功能模块，将内容发布到最接近用户的网络“边缘”，使用户就近获取所需内容，降低网络拥塞，提高用户访问网站的响应速度。 <sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup></p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/GSLB-Traffic-Diagram-1024x421.png alt="图：CDN 边缘节点就近分发内容。" loading=lazy>
+<figcaption>图：CDN 边缘节点就近分发内容。</figcaption>
+</figure></p>
+<h3 id=12-核心技术>1.2 核心技术</h3>
+<p>CDN 改进了传统网络架构，广泛利用缓存技术，将各种缓存服务器分布到用户访问相对集中的基础网络中，并利用负载均衡技术将用户的访问指向离用户最近的最优的缓存服务器上，由缓存服务器直接响应用户的请求。支撑 CDN 运营的关键技术包括 CDN 负载均衡技术、内容分发技术以及内容缓存技术等。</p>
+<h4 id=121-anycast>1.2.1 Anycast</h4>
+<p>Anycast（或称 IP Anycast），是一种允许多台机器共享同一个 IP 地址的网络技术。 根据用户请求的位置，路由器将其发送到网络中<strong>距离最近</strong>的机器。它可以<strong>降低延迟</strong>、<strong>增加冗余</strong>。如果某个数据中心下线，则 Anycast IP 会为用户选择最佳路径，并自动将他们重定向到下一个最近的数据中心。<sup id=fnref:2><a href=#fn:2 class=footnote-ref role=doc-noteref>2</a></sup></p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/anycast.png alt="图：Anycast 技术发现最短路径。" loading=lazy>
+<figcaption>图：Anycast 技术发现最短路径。</figcaption>
+</figure></p>
+<h4 id=122-内容分发>1.2.2 内容分发</h4>
+<p>通常 CDN 支持标准 HTTP/1.1 或 HTTP/2.0 协议，支持分发标准的 <a href=https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types>MIME 文件格式</a>，如 <code>text/html</code>、<code>application/json</code>。但是大部分传统 CDN 对于包含动态内容的协议，例如 WebSocket、gRPC、TCP、UDP 支持并不充分。</p>
+<p>WebSocket 是一种实时通信协议，通过长期保持的 TCP 连接，在客户端（例如浏览器）和服务器之间提供双向通信。通过使用持久性开放连接，客户端和服务器可以相互发送实时数据，而客户端不必经常重新启动连接以检查要交换的新数据。WebSocket 连接通常用于聊天应用程序、协作平台、多人游戏和金融交易平台。<sup id=fnref:3><a href=#fn:3 class=footnote-ref role=doc-noteref>3</a></sup></p>
+<p>gRPC 协议是 Google 于 2015 年开发的，目的是使用较小的有效负载构建高效的 API，以减少带宽使用量，降低延迟并加快实施速度。<sup id=fnref:4><a href=#fn:4 class=footnote-ref role=doc-noteref>4</a></sup></p>
+<p>AWS 的 <a href=https://docs.aws.amazon.com/global-accelerator/latest/dg/introduction-how-it-works.html>Global Accelerator</a> 与 Cloudflare 的 <a href=https://www.cloudflare.com/zh-cn/products/cloudflare-spectrum/>Spectrum</a> 产品还支持 TCP/UDP 4 层流量代理。</p>
+<p>值得一提的是，截至 2021 年 9 月，阿里云 CDN 的 Websocket 需要额外申请开通，并且<a href=https://help.aliyun.com/document_detail/145585.html>额外计费</a>。华为云的 CDN <a href=https://support.huaweicloud.com/cdn_faq/cdn_faq_0063.html>不支持 Websocket 协议</a>。</p>
+<h4 id=123-内容缓存>1.2.3 内容缓存</h4>
+<p>通常情况下，Web 缓存过程是在提供内容是由缓存保存静态文件（例如图像）的副本，以便下次能在更接近该用户的地方更快地提供。浏览器和<a href=https://www.cloudflare.com/learning/cdn/what-is-a-cdn/>内容分发网络（CDN）</a>能在设定的时间段内缓存静态内容，并在继续收到对内容的请求时向用户提供。这是因为静态内容不会随着时间而变化；相同的文件可以反复提供给用户。</p>
+<p>动态内容由更改页面内容的脚本生成。通过在 CDN 缓存中而不是在远程原始服务器中运行脚本，可以生成动态内容并从缓存中传递动态内容。因此，动态内容本质上被"缓存了" ，不必从源服务器提供，减少了对客户端请求的响应时间，并加快了动态网页的速度。<sup id=fnref:5><a href=#fn:5 class=footnote-ref role=doc-noteref>5</a></sup></p>
+<h4 id=124-ddos-保护>1.2.4 DDoS 保护</h4>
+<p>配置得当的高级内容交付网络 (CDN) 有助于抵御 DDoS 攻击。在网站保护服务提供商使用其 CDN 专门加速使用 HTTP 和 HTTPS 协议的流量时，所有针对该 URL 发动的 DDoS 攻击流量都会在网络边缘被丢弃。这意味着第 3 层和第 4 层 DDoS 攻击会立即得到抵御，因为这种类型的流量并非以 Web 端口 80 和 443 为目标。该网络采用云端代理的形式，布设在客户的 IT 基础架构前方，将来自最终用户的流量传送到网站和应用程序。由于这些解决方案采用内嵌运作模式，面向 Web 的资产将会始终受到保护，不需要人工干预，也不会受到网络层 DDoS 攻击。</p>
+<p>对于应用层防御，企业应考虑部署<a href=https://www.akamai.com/zh/products/web-application-protector>Web 应用程序防火墙</a>，以对抗高级攻击，包括某些类型的 DDoS 攻击，比如旨在破坏 OSI 模型第 7 层应用程序处理的 HTTP GET 和 HTTP POST 泛洪攻击。<sup id=fnref:6><a href=#fn:6 class=footnote-ref role=doc-noteref>6</a></sup></p>
+<h4 id=125-serverless-faas>1.2.5 Serverless FAAS</h4>
+<p>功能即服务 (FaaS) 是一种 的 <a href=https://www.cloudflare.com/learning/serverless/what-is-serverless/>Serverless</a> 在边缘执行模块化代码 方式。FaaS 允许开发人员即时编写和更新一段代码，然后可以执行这些代码以响应事件，例如用户单击 Web 应用程序中的元素。<sup id=fnref:7><a href=#fn:7 class=footnote-ref role=doc-noteref>7</a></sup></p>
+<p>部分 CDN 厂商提供在 Edge Network 编写函数的方式实现灵活的连接、内容、缓存控制，通常函数支持 JavaScript 语言，一些产品也支持 Webassembly。</p>
+<h2 id=2-cdn-行业对比>2. CDN 行业对比</h2>
+<p>根据 Akamai 的文章 “<a href=https://www.akamai.com/zh/our-thinking/cdn/what-is-a-cdn>什么是 CDN</a>“ 所述 CDN 为性能、可用性、安全和智能提供了解决方案，本节将从这几方面进行对比。</p>
+<h3 id=21-市场份额>2.1. 市场份额</h3>
+<h4 id=211-全球静态资源-cdn-统计>2.1.1. 全球静态资源 CDN 统计</h4>
+<p>根据 Datanyze 的<a href=https://www.datanyze.com/market-share/cdn--10>静态资源的 CDN 使用情况统计报告</a>：</p>
+<p>静态资源排名第一名的 Google Hosted Libraries 应该是 Google 静态资源例如 <code>fonts.google.com</code>，排名第五的 jsDelivr 是由 Cloudflare、Fastly 以及国内 CDN 厂商支持的开源静态资源 CDN。</p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/image-20210924162429131.png alt="图：Datanyze 统计的静态资源 CDN 使用排名。" loading=lazy>
+<figcaption>图：Datanyze 统计的静态资源 CDN 使用排名。</figcaption>
+</figure></p>
+<p>Cloudflare 提供免费的 CDN，包含静态资源与动态资源加速，以及免费的 SSL 证书。</p>
+<h4 id=212-客户分析>2.1.2. 客户分析</h4>
+<p>按 CDN 提供的服务类型、目标最终用户以及所服务的地理区域进行细分。</p>
+<p>许多使用 CDN 的公司需要多个 CDN 提供商，因为他们会有不同的需求，而单个 CDN 通常无法提供。</p>
+<p>供应商可以选择在北美和欧洲设有分支机构的 CDN 提供商以满足其在这些地区的需求，同时在其他地方选择另一家本地供应商。随着小型企业的扩展，可用性和冗余成为首要考虑因素。多 CDN 策略使公司能够进行负载平衡，从而降低低效流量或中断的风险。</p>
+<p>按客户数量计算的 Top CDN 提供商是 Cloudflare、Amazon Web Services (AWS)、Akamai、NetDNA、Fastly、Imperva、Verizon 和 Microsoft Azure。 <sup id=fnref:8><a href=#fn:8 class=footnote-ref role=doc-noteref>8</a></sup></p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/5f0609c6e8dd721e170de169_Customer.png alt="图：2020 年 CDN 厂商客户数对比。" loading=lazy>
+<figcaption>图：2020 年 CDN 厂商客户数对比。</figcaption>
+</figure></p>
+<p>从表面上看，Cloudflare 似乎是其客户数量最大的 CDN。 Cloudflare 为超过 100 万客户提供 CDN 服务。 尽管它拥有庞大的客户群，但这个价值并不能说明全部。</p>
+<p>Cloudflare 拥有不到 10,000 个中端市场和企业客户； 其大多数客户是中端市场和中小型企业。它的许多客户使用 Cloudflare 的服务来加速网站，同时也提高安全性。</p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/5f0609f1bfec1a5d44872017_Customer.png alt="图：2020 年 CDN 厂商大企业、中小企业客户数对比。" loading=lazy>
+<figcaption>图：2020 年 CDN 厂商大企业、中小企业客户数对比。</figcaption>
+</figure></p>
+<h4 id=213-市场分析>2.1.3. 市场分析</h4>
+<p>使用反向代理是网站的一个大趋势。在过去一年，使用反向代理的网站占全部网站的比例从 17.1% 增长到 21.6%。这个市场最大的提供商是 Cloudflare，市场份额占比约为 80%。另外两个提供商是 Fastly 和 AWS 的CloudFront。Cloudflare 的增长速度比这两家要低，所以市场份额跟一年前比有轻微缩小。但是整个反向代理市场在增大，CDN 行业都在高速增长。<sup id=fnref:9><a href=#fn:9 class=footnote-ref role=doc-noteref>9</a></sup></p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/image-20210924171459378.png alt="图：使用反向代理的网站占比（2020年 9月~2021年 9月）。" loading=lazy>
+<figcaption>图：使用反向代理的网站占比（2020年 9月~2021年 9月）。</figcaption>
+</figure></p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/m.png alt="图：使用反向代理的网站占比（2020年 9月~2021年 9月）。" loading=lazy>
+<figcaption>图：使用反向代理的网站占比（2020年 9月~2021年 9月）。</figcaption>
+</figure></p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/Share.svg alt="图：网站使用的反向代理提供商占比（2021年 9月）。" loading=lazy>
+<figcaption>图：网站使用的反向代理提供商占比（2021年 9月）。</figcaption>
+</figure></p>
+<p>根据 <a href=https://w3techs.com/technologies/history_overview/proxy/all>w3techs</a> 2021 年 9 月的 CDN 厂商市场份额占比数据显示，Cloudflare 遥遥领先。</p>
+<h3 id=22-性能>2.2. 性能</h3>
+<p>CDNPerf 提供的 2021 年 9 月 <a href=https://www.cdnperf.com/>CDN 性能对比排名 Top 10</a>（仅供参考）：</p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/image-20210923135054873.png alt loading=lazy>
+</figure></p>
+<p>CDN 性能取决于 PoP 接入点（Point of Presence）、ISP 网络质量（QoS）、高低峰、文件类型（静态/动态）、文件压缩技术（Gzip/Brotli）、HTTP 协议（HTTP/1.1, HTTP/2.0, HTTP/3）、Cache 机制（是否回源）、网络带宽等因素，不能一概而论。</p>
+<h4 id=221-pop-接入点>2.2.1. PoP 接入点</h4>
+<p>![图：CDN PoP 接入点数量对比。](images/CDN PoPs.svg)</p>
+<p>注：Akamai 没有公开 PoP 节点。</p>
+<h3 id=23-可用性>2.3. 可用性</h3>
+<p>RUM（Real User Monitoring）<a href=https://www.cdnperf.com/#!rum>Uptime 在线时间排名 Top 10</a>：</p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/image-20210923135156192.png alt loading=lazy>
+</figure></p>
+<h3 id=24-安全性>2.4. 安全性</h3>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/image-20210926161556278.png alt="图：2021 Q1 DDoS 缓解方案对比报告。" loading=lazy>
+<figcaption>图：2021 Q1 DDoS 缓解方案对比报告。</figcaption>
+</figure></p>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/image-20210926162016484.png alt="图：2021 Q1 CDN 厂商 DDoS 缓解方案得分表报告。" loading=lazy>
+<figcaption>图：2021 Q1 CDN 厂商 DDoS 缓解方案得分表报告。</figcaption>
+</figure></p>
+<p>Cloudflare 的 DDoS 缓解方案得分高于 Akamai、亚马逊网络服务、谷歌和微软。 <sup id=fnref:10><a href=#fn:10 class=footnote-ref role=doc-noteref>10</a></sup></p>
+<p><em>历史新闻事件：</em></p>
+<ul>
+<li><a href=https://blog.cloudflare.com/cloudflare-thwarts-17-2m-rps-ddos-attack-the-largest-ever-reported/>Cloudflare 阻止了 1720 万 rps 的 DDoS 攻击——有史以来最大的一次</a></li>
+<li><a href=https://www.darkreading.com/attacks-breaches/ddos-attack-hits-400-gbit-s-breaks-record>Cloudflare 缓解了 2014 年有史以来最大的 DDoS 攻击</a></li>
+</ul>
+<h3 id=25-功能>2.5. 功能</h3>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/7a1a6570-a12f-44ab-91e4-2b5c4ba89ef7.png alt="图：CDN 功能对比。" loading=lazy>
+<figcaption>图：CDN 功能对比。</figcaption>
+</figure></p>
+<p>注：部分数据来自于 <a href=https://cdncomparison.com/>Best CDN Comparison</a>。</p>
+<h3 id=26-价格>2.6. 价格</h3>
+<p>
+<figure class=image>
+<img src=/2021/09/%E6%B5%B7%E5%A4%96-cdn-%E9%80%89%E5%9E%8B%E5%AF%B9%E6%AF%94/images/Bandwith.svg alt="图：带宽成本（50% 北美流量、50% 亚洲流量）对比。" loading=lazy>
+<figcaption>图：带宽成本（50% 北美流量、50% 亚洲流量）对比。</figcaption>
+</figure></p>
+<p>注：价格成本计算数据来自 <a href=https://www.cdnperf.com/tools/cdn-calculator>CDNPerf Calculator</a>。</p>
+<section class=footnotes role=doc-endnotes>
+<hr>
+<ol>
+<li id=fn:1 role=doc-endnote>
+<p><a href=http://qccdata.qichacha.com/ReportData/PDF/8fc38073f5bddba3b5524da89ae69162.pdf>2019 中国 CDN 行业市场研究报告</a>&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:2 role=doc-endnote>
+<p><a href=https://www.keycdn.com/support/anycast>How Anycast Works - An Introduction to Networking</a>&#160;<a href=#fnref:2 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:3 role=doc-endnote>
+<p><a href=https://aws.amazon.com/cn/about-aws/whats-new/2018/11/amazon-cloudfront-announces-support-for-the-websocket-protocol/>Amazon CloudFront 发布针对 WebSocket 协议的支持</a>&#160;<a href=#fnref:3 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:4 role=doc-endnote>
+<p><a href=https://support.cloudflare.com/hc/zh-cn/articles/360050483011-%E4%BA%86%E8%A7%A3-Cloudflare-gRPC-%E6%94%AF%E6%8C%81>了解 Cloudflare gRPC 支持</a>&#160;<a href=#fnref:4 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:5 role=doc-endnote>
+<p><a href=https://www.cloudflare.com/zh-cn/learning/cdn/caching-static-and-dynamic-content/>缓存静态和动态内容 | 它是如何工作的？</a>&#160;<a href=#fnref:5 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:6 role=doc-endnote>
+<p><a href=https://www.akamai.com/zh/our-thinking/ddos>什么是 DDoS 攻击？</a>&#160;<a href=#fnref:6 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:7 role=doc-endnote>
+<p><a href=https://www.cloudflare.com/learning/serverless/glossary/function-as-a-service-faas/>What is Function-as-a-Service (FaaS)?</a>&#160;<a href=#fnref:7 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:8 role=doc-endnote>
+<p><a href=https://blog.intricately.com/2020-state-of-the-cdn-industry-trends-market-share-customer-size>2020 State Of The CDN Industry: Trends, Size, And Market Share</a>&#160;<a href=#fnref:8 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:9 role=doc-endnote>
+<p><a href=https://xueqiu.com/1854210216/193203879>Cloudflare垄断网站反向代理市场</a>&#160;<a href=#fnref:9 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:10 role=doc-endnote>
+<p><a href=https://getfishtank.ca/blog/cloudflare-recognized-as-industry-leader-by-forrester-and-gartner>Cloudflare Recognized As Industry Leader By Forrester And Gartner</a>&#160;<a href=#fnref:10 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+</ol>
+</section>
+</div>
+<footer class=post-footer>
+<div class=post-meta>
+<time datetime=" 2021-09-26" itemprop=datePublished>Sep 26, 2021</time>
+</div>
+</footer>
+</article>
+<script src=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.min.js></script>
+<aside class=typeface-serif lang=zh-hans>
+<nav class=toc></nav>
+</aside>
+<script>tocbot.init({tocSelector:'.toc',contentSelector:'article',headingSelector:'h1, h2, h3, h4, h5',hasInnerContainers:!0,collapseDepth:"3",positionFixedSelector:".toc",headingsOffset:10})</script>
+</div><script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/prism.min.js></script>
+<script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/plugins/filter-highlight-all/prism-filter-highlight-all.min.js></script>
+<script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/plugins/autoloader/prism-autoloader.min.js></script>
+<script>Prism.plugins.filterHighlightAll.add(function(a){return a.language!=="mermaid"})</script>
+<script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js></script>
+<script>mermaid.init({startOnLoad:!0},"pre code.language-mermaid",function(){const a=document.querySelectorAll('code.language-mermaid');for(const c of a){c.style.backgroundColor='initial';const b=c.parentNode;b.style.border='none',b.style.textAlign='center',window.darkmode&&!window.darkmode.isActivated()&&(b.style.backgroundColor='initial')}})</script>
+</div>
+</main><footer class=site-footer>
+<div class=wrapper>
+<div class=social-links>
+<a class="social-link social-github" href=https://github.com/mayocream><svg style="width:24px;height:24px" viewBox="0 0 24 24"><path fill="currentcolor" d="M12 2A10 10 0 002 12c0 4.42 2.87 8.17 6.84 9.5C9.34 21.58 9.5 21.27 9.5 21 9.5 20.77 9.5 20.14 9.5 19.31 6.73 19.91 6.14 17.97 6.14 17.97c-.46-1.16-1.11-1.47-1.11-1.47C4.12 15.88 5.1 15.9 5.1 15.9 6.1 15.97 6.63 16.93 6.63 16.93 7.5 18.45 8.97 18 9.54 17.76 9.63 17.11 9.89 16.67 10.17 16.42c-2.22-.25-4.55-1.11-4.55-4.92.0-1.11.38-2 1.03-2.71C6.55 8.54 6.2 7.5 6.75 6.15c0 0 .84-.27 2.75 1.02C10.29 6.95 11.15 6.84 12 6.84s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02C17.8 7.5 17.45 8.54 17.35 8.79 18 9.5 18.38 10.39 18.38 11.5c0 3.82-2.34 4.66-4.57 4.91C14.17 16.72 14.5 17.33 14.5 18.26c0 1.34.0 2.42.0 2.74.0.27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/></svg>
+</a>
+<a class="social-link social-twitter" href=https://twitter.com/Freeze_Mayo><svg style="width:24px;height:24px" viewBox="0 0 24 24"><path fill="currentcolor" d="M22.46 6c-.77.35-1.6.58-2.46.69C20.88 6.16 21.56 5.32 21.88 4.31 21.05 4.81 20.13 5.16 19.16 5.36 18.37 4.5 17.26 4 16 4c-2.35.0-4.27 1.92-4.27 4.29C11.73 8.63 11.77 8.96 11.84 9.27 8.28 9.09 5.11 7.38 3 4.79c-.37.63-.58 1.37-.58 2.15.0 1.49.75 2.81 1.91 3.56C3.62 10.5 2.96 10.3 2.38 10V10.03c0 2.08 1.48 3.82 3.44 4.21C5.46 14.34 5.08 14.39 4.69 14.39 4.42 14.39 4.15 14.36 3.89 14.31c.54 1.69 2.11 2.95 4 2.98-1.46 1.16-3.31 1.84-5.33 1.84C2.22 19.13 1.88 19.11 1.54 19.07 3.44 20.29 5.7 21 8.12 21 16 21 20.33 14.46 20.33 8.79 20.33 8.6 20.33 8.42 20.32 8.23 21.16 7.63 21.88 6.87 22.46 6z"/></svg>
+</a>
+<a class="social-link social-rss" href=/index.xml target=_blank><svg style="width:24px;height:24px" viewBox="0 0 24 24"><path fill="currentcolor" d="M6.18 15.64a2.18 2.18.0 012.18 2.18C8.36 19 7.38 20 6.18 20 5 20 4 19 4 17.82a2.18 2.18.0 012.18-2.18M4 4.44A15.56 15.56.0 0119.56 20H16.73A12.73 12.73.0 004 7.27V4.44M4 10.1A9.9 9.9.0 0113.9 20H11.07A7.07 7.07.0 004 12.93V10.1z"/></svg>
+</a>
+</div>
+<div class=credits>
+Theme KAGAMI by Kamikat
+</div>
+</div>
+</footer><script>(function(a){for(var a=Array.prototype.slice.call(document.getElementsByClassName('baseline-fix')),b=0,c;b!=a.length;b++)c=a[b],c.innerHTML=c.innerHTML.replace(/[\u2000-\u206e⸀-\u2e7e⺀-\u2efe⼀-\u2fde⿰-\u2ffe\u3000-〾\u3040-ゞ゠-ヾ\u3100-\u312e\u3130-ㆎ㆐-㆞ㆠ-\u31be㇀-\u31eeㇰ-ㇾ㈀-㋾㌀-㏾㐀-\u4dbe一-\u9ffe\ua960-\ua97e가-\ud7ae\ud7b0-\ud7fe豈-\ufafe︰-﹎\uff00-￮]|[\ud840-\ud868\ud86a-\ud86c][\udc00-\udfff]|\ud82c[\udc00-\udcfe]|\ud869[\udc00-\udede\udf00-\udfff]|\ud86d[\udc00-\udf3e\udf40-\udfff]|\ud86e[\udc00-\udc1e]|\ud87e[\udc00-\ude1e]/g,function(a){return'<span class="baseline-fix-block">'+a+'<'+'/span>'}),c.classList.remove('baseline-fix')})(Array.prototype.slice.call(document.getElementsByClassName('baseline-fix')))</script>
+<script type=text/javascript>const resize=function(){this.width=.5*(this.naturalWidth||this.width)};Array.prototype.forEach.call(document.querySelectorAll('.half-size, .retina2x'),function(a){a.naturalWidth?resize.call(a):a.onload=resize})</script>
+<script src=https://cdn.jsdelivr.net/npm/twemoji@13.1.0/dist/twemoji.min.js></script>
+<script>twemoji.parse(document.body,{folder:'svg',ext:'.svg'})</script>
+</body>
