@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1632724447" media=all>
+<link rel=stylesheet href="/bundle.css?v=1632724999" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://unavatar.io/twitter/Freeze_Mayo><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://shoujo.ink/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/>
@@ -215,13 +215,11 @@ end
 </blockquote>
 <p>Lua Table 需要注意的地方其二：</p>
 <blockquote>
-<p>table.insert</p>
 <p>table.insert 虽然是一个很常见的操作，但性能并不乐观。
 如果不是根据指定下标来插入元素，那么每次都需要调用 LuaJIT 的 lj_tab_len 来获取数组的长度，以便插入队尾。获取 table 长度的时间复杂度为 O(n) 。</p>
 </blockquote>
-<p>参考 APISIX 作者给 <a href=https://github.com/kubernetes/ingress-nginx>ingress-nginx</a> 项目提的 Table 操作优化 PR：https://github.com/kubernetes/ingress-nginx/pull/3673</p>
-<p>OpenResty Fork 的 LuaJIT 新增的 table 函数：</p>
-<p>Repo: <a href=https://github.com/openresty/luajit2>openresty/luajit2</a></p>
+<p>参考 APISIX 作者给 <a href=https://github.com/kubernetes/ingress-nginx>ingress-nginx</a> 项目提的 Table 操作优化 PR：<a href=https://github.com/kubernetes/ingress-nginx/pull/3673>used table functions of LuaJIT for better performance.</a></p>
+<p>OpenResty Fork 的 LuaJIT 新增的 table 函数<sup id=fnref:4><a href=#fn:4 class=footnote-ref role=doc-noteref>4</a></sup>：</p>
 <ul>
 <li>table.isempty</li>
 <li>table.isarray</li>
@@ -445,11 +443,11 @@ end
 <li><code>init_by_lua</code> 阶段创建 OpenResty 特权进程，负责执行特定的后台任务，不会干扰其他 Worker 进程，权限相当于 root；</li>
 <li><code>init_by_worker</code> 阶段创建 Background Timer，执行并发执行后台任务。</li>
 </ol>
-<p>OpenResty 特权进程不能处理请求，只能由 Timer 触发，逻辑上编写 <code>if type(ngx.process.type()) == "privileged agent"</code> 只在特权进程中执行操作。<sup id=fnref:4><a href=#fn:4 class=footnote-ref role=doc-noteref>4</a></sup></p>
+<p>OpenResty 特权进程不能处理请求，只能由 Timer 触发，逻辑上编写 <code>if type(ngx.process.type()) == "privileged agent"</code> 只在特权进程中执行操作。<sup id=fnref:5><a href=#fn:5 class=footnote-ref role=doc-noteref>5</a></sup></p>
 <blockquote>
 <p>Enables the privileged agent process in Nginx.</p>
 <p>The privileged agent process does not listen on any virtual server ports like those worker processes. And it uses the same system account as the nginx master process, which is usually a privileged account like <code>root</code>.</p>
-<p>The <code>init_worker_by_lua*</code> directive handler still runs in the privileged agent process. And one can use the <a href=https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/process.md#type>type</a> function provided by this module to check if the current process is a privileged agent.<sup id=fnref:5><a href=#fn:5 class=footnote-ref role=doc-noteref>5</a></sup></p>
+<p>The <code>init_worker_by_lua*</code> directive handler still runs in the privileged agent process. And one can use the <a href=https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/process.md#type>type</a> function provided by this module to check if the current process is a privileged agent.<sup id=fnref:6><a href=#fn:6 class=footnote-ref role=doc-noteref>6</a></sup></p>
 </blockquote>
 <pre><code class=language-lua>-- worker 默认后台运行的 timer, 执行各种后台任务 
 local function background_timer()
@@ -498,9 +496,9 @@ end
 <h4 id=223-请求生命周期>2.2.3. 请求生命周期</h4>
 <h5 id=2231-ctx>2.2.3.1. ctx</h5>
 <blockquote>
-<p>Use <code>ngx.ctx</code> wherever you can. <code>ngx.var</code> is much more expensive and is also limited to string values. The latter should only be used to exchange data with other nginx C modules.<sup id=fnref:6><a href=#fn:6 class=footnote-ref role=doc-noteref>6</a></sup></p>
+<p>Use <code>ngx.ctx</code> wherever you can. <code>ngx.var</code> is much more expensive and is also limited to string values. The latter should only be used to exchange data with other nginx C modules.<sup id=fnref:7><a href=#fn:7 class=footnote-ref role=doc-noteref>7</a></sup></p>
 </blockquote>
-<p>APISIX 中使用缓存 <code>ngx.var</code> 获取的结果， 在不同生命周期中传递。使用 <a href=https://github.com/api7/lua-var-nginx-module>lua-var-nginx-module</a> Nginx C 模块和 FFI 获取变量，在没有开启 Nginx C 模块的情况下回退到 <code>ngx.var</code> 方式获取。APISIX 默认没有在构建脚本中加载 C 模块，提交的<a href=https://github.com/api7/apisix-build-tools/pull/44>该 PR</a> 在编译 OpenResty 时添加了该模块。</p>
+<p>APISIX 中使用缓存 <code>ngx.var</code> 获取的结果， 在不同生命周期中传递。使用 <a href=https://github.com/api7/lua-var-nginx-module>lua-var-nginx-module</a> Nginx C 模块和 FFI 获取变量，在没有开启 Nginx C 模块的情况下回退到 <code>ngx.var</code> 方式获取。APISIX 默认没有在构建脚本中加载 C 模块，提交的 PR <a href=https://github.com/api7/apisix-build-tools/pull/44>feat: add lua-var-nginx-module</a> 在编译 OpenResty 时添加了该模块。</p>
 <pre><code class=language-lua>function _M.set_vars_meta(ctx)
     -- 从 table 池中获取/创建一个 hash 长度为 32 的 table
     local var = tablepool.fetch(&quot;ctx_var&quot;, 0, 32)
@@ -642,7 +640,7 @@ end
 <p>etcd 在 APISIX 中作用相同与 PostgreSQL 之于 Kong，内部使用 <a href=https://github.com/api7/lua-resty-etcd>lua-resty-etcd</a> 作为客户端，使用 timer 定时执行和长轮询获取跟踪 etcd 中数据的变化。</p>
 <p>这里的优化点与 Kong 一样，在 <code>init_by_lua</code> 阶段进行数据的 warm up，之后数据会 fork 到其他的进程中。</p>
 <blockquote>
-<p>It does not really make much sense to use this library in the context of <a href=https://github.com/openresty/lua-nginx-module#lua_shared_dict>init_by_lua</a> because the cache will not get shared by any of the worker processes (unless you just want to &ldquo;warm up&rdquo; the cache with predefined items which will get inherited by the workers via <code>fork()</code>).<sup id=fnref:7><a href=#fn:7 class=footnote-ref role=doc-noteref>7</a></sup></p>
+<p>It does not really make much sense to use this library in the context of <a href=https://github.com/openresty/lua-nginx-module#lua_shared_dict>init_by_lua</a> because the cache will not get shared by any of the worker processes (unless you just want to &ldquo;warm up&rdquo; the cache with predefined items which will get inherited by the workers via <code>fork()</code>).<sup id=fnref:8><a href=#fn:8 class=footnote-ref role=doc-noteref>8</a></sup></p>
 </blockquote>
 <h5 id=2241-初始化>2.2.4.1. 初始化</h5>
 <p>读取 etcd 数据到全局单例的 Lua table。</p>
@@ -738,7 +736,7 @@ end
 <p><code>schema_def.lua</code> 文件中定义了所有储存数据结构的 schema 校验规则，使用 <a href=https://github.com/api7/jsonschema>jsonschema</a> 库进行数据校验。</p>
 <p><code>core/schema.lua</code> 中使用 LRU 缓存校验器。</p>
 <p><code>load_full_data</code> 函数加载数据结构所需的 etcd kvs，并进行数据转换、校验、格式化、执行回调。</p>
-<pre><code class=language-mermaid>graph LR
+<pre><code class=language-mermaid>graph TD
 	1[创建 table 缓存新数据] --&gt; 2[jsonschema 校验数据格式]
 	2 --&gt; 3[自定义 check 函数检查数据格式]
 	3 --&gt; 4[自定义 filter 函数过滤数据]
@@ -1185,7 +1183,7 @@ end
 <p>具体各个阶段执行逻辑应该与 Kong 相同，即部分阶段插件开协程并发执行，部分阶段避免数据竞争，插件顺序执行。</p>
 <p>值得注意的一点是 APISIX 生命周期里没有 <code>rewrite_by_lua</code> 阶段，插件实现的该阶段会在 <code>access_by_lua</code> 中优先于 <code>access_by_lua</code> 插件逻辑执行。</p>
 <blockquote>
-<p>The apisix run both &ldquo;.access&rdquo; and &ldquo;.rewrite&rdquo; in the &ldquo;access&rdquo; phase.<sup id=fnref:8><a href=#fn:8 class=footnote-ref role=doc-noteref>8</a></sup></p>
+<p>The apisix run both &ldquo;.access&rdquo; and &ldquo;.rewrite&rdquo; in the &ldquo;access&rdquo; phase.<sup id=fnref:9><a href=#fn:9 class=footnote-ref role=doc-noteref>9</a></sup></p>
 </blockquote>
 <h5 id=2331-插件加载>2.3.3.1. 插件加载</h5>
 <p>插件列表从本地 yaml 文件获取，同时监听本地文件变化，同步配置；插件配置信息从 etcd 获取。</p>
@@ -1306,7 +1304,7 @@ end
 </code></pre>
 <h4 id=234-主流程>2.3.4. 主流程</h4>
 <p>以 Nginx HTTP Subsystem 为例分析主要执行逻辑，其中一些核心逻辑已在上述小节中流程分析过。</p>
-<h5 id=2331-init_by_lua>2.3.3.1. init_by_lua</h5>
+<h5 id=2341-init_by_lua>2.3.4.1. init_by_lua</h5>
 <pre><code class=language-mermaid>graph TD
 	1[&quot;1. 加载 resty.core&quot;]
 	2[&quot;2. ngx.re JIT 缓存参数优化&quot;]
@@ -1349,7 +1347,7 @@ end
     end
 end
 </code></pre>
-<h5 id=2332-init_worker_by_lua>2.3.3.2. init_worker_by_lua</h5>
+<h5 id=2342-init_worker_by_lua>2.3.4.2. init_worker_by_lua</h5>
 <pre><code class=language-mermaid>graph TD
 	1[&quot;1. random seed 初始化&quot;]
 	2[&quot;2. 外部服务发现 (默认没有开启, consul, dubbo)&quot;]
@@ -1361,7 +1359,7 @@ end
 	1 --&gt; 2 --&gt; 3 --&gt; 4
 	4 --&gt; 5 --&gt; 6 --&gt; 7
 </code></pre>
-<pre><code class=language-mermaid>graph LR
+<pre><code class=language-mermaid>graph TD
 	subgraph &quot;7. 从 etcd 获取 routes/services/upstreams&quot;
         71[&quot;a. 创建 router (uri/sni)&quot;]
         72[&quot;b. 挂载 filter 回调函数&quot;]
@@ -1429,7 +1427,7 @@ end
     end
 end
 </code></pre>
-<h5 id=2333-access_by_lua>2.3.3.3. access_by_lua</h5>
+<h5 id=2343-access_by_lua>2.3.4.3. access_by_lua</h5>
 <pre><code class=language-lua>-- access_by_lua 阶段, apisix 没有 rewrite_by_lua
 -- ref: https://github.com/apache/apisix/issues/1120
 -- ref: https://github.com/apache/apisix/issues/1120#issuecomment-584949073
@@ -1560,9 +1558,9 @@ end
 <h3 id=21-边缘计算>2.1. 边缘计算</h3>
 <blockquote>
 <p>对于互联网设备，网络边缘是设备或包含设备的本地网络与互联网通信的位置。边缘是个比较模糊的术语。例如，可以将用户的计算机或 IoT 摄像头内部的处理器视为网络边缘，但也可以将用户的路由器、ISP 或本地边缘服务器视为边缘。重要的是，网络边缘在地理位置上靠近设备，与<a href=https://www.cloudflare.com/learning/cdn/glossary/origin-server/>源站</a>和云服务器不同，后者可能与它们相互通信的设备相距很远。</p>
-<p>完全减轻额外硬件需求的一种方法是利用边缘服务器。例如，借助 Cloudflare 分散在全球各地的 194 个边缘服务器网络，Cloudflare 的客户可以使用 <a href=https://www.cloudflare.com/products/cloudflare-workers/>Cloudflare Workers</a> 在全球范围内运行边缘代码。<sup id=fnref:9><a href=#fn:9 class=footnote-ref role=doc-noteref>9</a></sup></p>
+<p>完全减轻额外硬件需求的一种方法是利用边缘服务器。例如，借助 Cloudflare 分散在全球各地的 194 个边缘服务器网络，Cloudflare 的客户可以使用 <a href=https://www.cloudflare.com/products/cloudflare-workers/>Cloudflare Workers</a> 在全球范围内运行边缘代码。<sup id=fnref:10><a href=#fn:10 class=footnote-ref role=doc-noteref>10</a></sup></p>
 </blockquote>
-<p>Cloudflare 的边缘计算是基于 Edge Gateway（边缘网关、边缘集群）的 Serverless 代码执行，提供了 JS 代码执行，以及 WASM 二进制。<sup id=fnref:10><a href=#fn:10 class=footnote-ref role=doc-noteref>10</a></sup></p>
+<p>Cloudflare 的边缘计算是基于 Edge Gateway（边缘网关、边缘集群）的 Serverless 代码执行，提供了 JS 代码执行，以及 WASM 二进制。<sup id=fnref:11><a href=#fn:11 class=footnote-ref role=doc-noteref>11</a></sup></p>
 <p>
 <figure class=image>
 <img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/image-20210611155454963.png alt loading=lazy>
@@ -1583,7 +1581,7 @@ end
 </li>
 </ul>
 <h4 id=211-lua-serverless>2.1.1. Lua (Serverless)</h4>
-<p>APISIX 的 Serverless 插件功能支持注入任何 Lua 脚本，Kong 也支持对应的功能，APISIX 就是抄的 Kong 的插件功能。<sup id=fnref:11><a href=#fn:11 class=footnote-ref role=doc-noteref>11</a></sup></p>
+<p>APISIX 的 Serverless 插件功能支持注入任何 Lua 脚本，Kong 也支持对应的功能，APISIX 就是抄的 Kong 的插件功能。<sup id=fnref:12><a href=#fn:12 class=footnote-ref role=doc-noteref>12</a></sup></p>
 <p>
 <figure class=image>
 <img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/image-20210611160354452.png alt loading=lazy>
@@ -1593,7 +1591,7 @@ end
 <p>LuaJIT 的 FFI 功能能非常方便和高性能地调用 C lib，能通过 C 进行内存管理，或者交由 LuaJIT 自动 gc（该部分还在学习中）。</p>
 <p>出于性能最好的开源 WASM VM 引擎 <a href=https://github.com/WasmEdge/WasmEdge>WasmEdge</a>（C++ 编写）提供 C API，我尝试在 LuaJIT 中加载 <code>.so</code> 调用 WasmEdge 创建 VM 虚拟机（VMContext），执行 <code>.wasm</code> 文件。</p>
 <blockquote>
-<p>这部分代码还在进行中，主要目的是熟悉 WASM 基本操作，以及学习 LuaJIT FFI 调用方法（还需要学习一些 C 知识）。<sup id=fnref:12><a href=#fn:12 class=footnote-ref role=doc-noteref>12</a></sup></p>
+<p>这部分代码还在进行中，主要目的是熟悉 WASM 基本操作，以及学习 LuaJIT FFI 调用方法（还需要学习一些 C 知识）。<sup id=fnref:13><a href=#fn:13 class=footnote-ref role=doc-noteref>13</a></sup></p>
 </blockquote>
 <pre><code class=language-lua>local ffi = require &quot;ffi&quot;
 local wasmedge = ffi.load(&quot;libwasmedge.so&quot;)
@@ -1674,12 +1672,11 @@ ERROR [default]     Mismatched function type. Expected: params{i32 , i32} return
 </code></pre>
 <p>看上去直到参数传入为止还没问题，后续再继续研究。</p>
 <h3 id=22-mesh>2.2. Mesh</h3>
-<p>APISIX 网关的 Mesh 项目 <del>应该是从 Kong 抄过来的</del>。</p>
+<p>APISIX 网关的 Mesh 项目。值得一提的是 Kong 也有类似的 Mesh 项目。</p>
 <p>Repo: <a href=https://github.com/api7/apisix-mesh-agent>api7/apisix-mesh-agent</a></p>
 <p>
 <figure class=image>
-<img src alt=apisix-mesh-overview loading=lazy>
-<figcaption>apisix-mesh-overview</figcaption>
+<img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/apisix-mesh-overview.png alt loading=lazy>
 </figure></p>
 <p>Go 语言开发的 Agent，接入了 Istio 的协议：</p>
 <pre><code class=language-go>module github.com/api7/apisix-mesh-agent
@@ -1818,31 +1815,34 @@ require (
 <p><a href=https://yxudong.github.io/%E3%80%8AOpenResty%E7%B2%BE%E5%8D%8E%E6%95%B4%E7%90%86%E3%80%8B6.%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96/>《OpenResty精华整理》6.性能优化 </a>&#160;<a href=#fnref:3 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
 </li>
 <li id=fn:4 role=doc-endnote>
-<p><a href=https://www.cnblogs.com/liekkas01/p/12764577.html>OpenResty：特权进程和定时任务</a>&#160;<a href=#fnref:4 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+<p><a href=https://github.com/openresty/luajit2>openresty/luajit2</a>&#160;<a href=#fnref:4 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
 </li>
 <li id=fn:5 role=doc-endnote>
-<p><a href=https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/process.md#enable_privileged_agent>enable_privileged_agent</a>&#160;<a href=#fnref:5 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+<p><a href=https://www.cnblogs.com/liekkas01/p/12764577.html>OpenResty：特权进程和定时任务</a>&#160;<a href=#fnref:5 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
 </li>
 <li id=fn:6 role=doc-endnote>
-<p><a href=https://github.com/openresty/lua-nginx-module/issues/1482>ngx.var vs ngx.ctx</a>&#160;<a href=#fnref:6 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+<p><a href=https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/process.md#enable_privileged_agent>enable_privileged_agent</a>&#160;<a href=#fnref:6 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
 </li>
 <li id=fn:7 role=doc-endnote>
-<p><a href=https://github.com/openresty/lua-resty-lrucache#description>openresty/lua-resty-lrucache</a>&#160;<a href=#fnref:7 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+<p><a href=https://github.com/openresty/lua-nginx-module/issues/1482>ngx.var vs ngx.ctx</a>&#160;<a href=#fnref:7 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
 </li>
 <li id=fn:8 role=doc-endnote>
-<p><a href=https://github.com/apache/apisix/issues/1120#issuecomment-584949073>set variable inoperative!!</a>&#160;<a href=#fnref:8 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+<p><a href=https://github.com/openresty/lua-resty-lrucache#description>openresty/lua-resty-lrucache</a>&#160;<a href=#fnref:8 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
 </li>
 <li id=fn:9 role=doc-endnote>
-<p><a href=https://www.cloudflare.com/zh-cn/learning/serverless/glossary/what-is-edge-computing/>什么是边缘计算？</a>&#160;<a href=#fnref:9 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+<p><a href=https://github.com/apache/apisix/issues/1120#issuecomment-584949073>set variable inoperative!!</a>&#160;<a href=#fnref:9 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
 </li>
 <li id=fn:10 role=doc-endnote>
-<p><a href=https://blog.cloudflare.com/webassembly-on-cloudflare-workers/>WebAssembly on Cloudflare Workers</a>&#160;<a href=#fnref:10 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+<p><a href=https://www.cloudflare.com/zh-cn/learning/serverless/glossary/what-is-edge-computing/>什么是边缘计算？</a>&#160;<a href=#fnref:10 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
 </li>
 <li id=fn:11 role=doc-endnote>
-<p><a href=https://github.com/apache/apisix/blob/master/docs/en/latest/plugins/serverless.md>APISIX Serverless Plugin</a>&#160;<a href=#fnref:11 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+<p><a href=https://blog.cloudflare.com/webassembly-on-cloudflare-workers/>WebAssembly on Cloudflare Workers</a>&#160;<a href=#fnref:11 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
 </li>
 <li id=fn:12 role=doc-endnote>
-<p><a href=https://github.com/mayocream/lua-resty-wasm>mayocream/lua-resty-wasm</a>&#160;<a href=#fnref:12 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+<p><a href=https://github.com/apache/apisix/blob/master/docs/en/latest/plugins/serverless.md>APISIX Serverless Plugin</a>&#160;<a href=#fnref:12 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:13 role=doc-endnote>
+<p><a href=https://github.com/mayocream/lua-resty-wasm>mayocream/lua-resty-wasm</a>&#160;<a href=#fnref:13 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
 </li>
 </ol>
 </section>
