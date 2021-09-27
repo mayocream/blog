@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1632723001" media=all>
+<link rel=stylesheet href="/bundle.css?v=1632723397" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://unavatar.io/twitter/Freeze_Mayo><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://shoujo.ink/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/>
@@ -46,22 +46,22 @@
 <p>本文基于 <a href=https://github.com/apache/apisix>APISIX</a> 2.6 版本进行源码分析，源码阅读注释仓库: <a href=https://github.com/mayocream/apisix/tree/review>review</a>，分析主要流程以及核心机制。</p>
 <p>在源码阅读过程中学习了涉及 OpenResty 的部分内容，包含 lua-resty-core（OpenResty 核心），以及 OpenResty 作者开源的 <code>lua-resty-*</code> 包，同时了解了 OpenResty 的测试框架 Test::Nginx。在源码阅读过程中给 APISIX 提了 2 个 PR（Code Style 以及 Build Script），知道了基本的 LuaJIT FFI 用法，该部分还在学习中。</p>
 <p>同时基于源码阅读，对公司网关选型进行了分析。</p>
-<h2 id=一apisix-概述>一、APISIX 概述</h2>
-<h3 id=11-项目概述>1.1 项目概述</h3>
+<h2 id=1-apisix-概述>1. APISIX 概述</h2>
+<h3 id=11-项目概述>1.1. 项目概述</h3>
 <p>既然 APISIX 是基于 OpenResty 开发的 API 网关，APISIX 与 OpenResty 的请求生命周期一致，APISIX 利用 Lua Nginx Module 提供的 <code>*_by_lua</code> 添加 Hook。</p>
 <p>
 <figure class=image>
-<img src alt="API Gateway traffic" loading=lazy>
+<img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/gateway-traffic.png alt="API Gateway traffic" loading=lazy>
 <figcaption>API Gateway traffic</figcaption>
 </figure></p>
 <p>它抽象了与 Kong 网关同样的数据模型，具有同样的 Route、Service、Upstream、Plugin、Consumer 等资源。</p>
 <div style=display:flex>
 <figure style=max-width:50%>
-<img src=https://user-images.githubusercontent.com/40708551/114740649-a9bf2200-9d67-11eb-8e1d-1409fb5c18c2.png>
+<img src=images/40708551/114740649-a9bf2200-9d67-11eb-8e1d-1409fb5c18c2.png>
 <figcaption style=text-align:center>APISIX</figcaption>
 </figure>
 <figure style=max-width:50%>
-<img src=https://docs.konghq.com/assets/images/docs/getting-started-guide/Kong-GS-overview.png>
+<img src=images/Kong-GS-overview.png>
 <figcaption style=text-align:center>Kong</figcaption>
 </figure>
 </div>
@@ -83,12 +83,12 @@
 <p>&ldquo;How does Kong solve similar problems?&rdquo;</p>
 <p>ref: <a href=https://github.com/apache/apisix/issues/3207#issuecomment-759269071>https://github.com/apache/apisix/issues/3207#issuecomment-759269071</a></p>
 </blockquote>
-<h3 id=12-生态概述>1.2 生态概述</h3>
+<h3 id=12-生态概述>1.2. 生态概述</h3>
 <p>Kong 网关开源生态有的，APISIX 基本都有或者正在做。包含：K8s Ingress Controller、Mesh、Dashboard。</p>
 <p>插件方面比 Kong 开源版本多了 Skywalking、Traffit 拆分、Mirror 流量功能。</p>
-<h2 id=二apisix-源码分析>二、APISIX 源码分析</h2>
-<h3 id=21-基本流程>2.1 基本流程</h3>
-<h4 id=211-目录结构>2.1.1 目录结构</h4>
+<h2 id=2-apisix-源码分析>2. APISIX 源码分析</h2>
+<h3 id=21-基本流程>2.1. 基本流程</h3>
+<h4 id=211-目录结构>2.1.1. 目录结构</h4>
 <pre><code class=language-bash>$ tree -L 2
 .
 ├── apisix
@@ -130,7 +130,7 @@
 ├── t # Test::Nginx 测试
 └── utils # Shell 脚本
 </code></pre>
-<h4 id=212-启动流程>2.1.2 启动流程</h4>
+<h4 id=212-启动流程>2.1.2. 启动流程</h4>
 <pre><code class=language-mermaid>graph LR
 	1[CLI 执行] --&gt; 2[&quot;运行 LUA 脚本 (LuaJIT)&quot;]
 	3[生成 Nginx 配置] --&gt; 4[初始化 etcd]
@@ -165,12 +165,12 @@ fi
 <li>使用 ltn12 <a href=http://lua-users.org/wiki/FiltersSourcesAndSinks>sink</a> 进行流处理；</li>
 <li>创建 etcd prefix，value 为 <code>init</code>；</li>
 </ul>
-<h3 id=22-apisix-core>2.2 APISIX Core</h3>
+<h3 id=22-apisix-core>2.2. APISIX Core</h3>
 <p>APISIX 的核心部分，也就是项目开发者说 “极简核⼼代码量，不到 4000 ⾏，去除空行、注释行数甚至不到 3000 行” 的部分。</p>
 <p>主要封装了一些库和函数。</p>
-<h4 id=221-基本类型操作>2.2.1 基本类型操作</h4>
+<h4 id=221-基本类型操作>2.2.1. 基本类型操作</h4>
 <p>基本上为了追求极致性能，能用 FFI 调用实现的都用了。</p>
-<h5 id=2211-字符串>2.2.1.1 字符串</h5>
+<h5 id=2211-字符串>2.2.1.1. 字符串</h5>
 <p>使用 FFI 调用 libc 函数 <code>memcmp</code> 进行字符串比较内存地址的前 n 长度是否相同。</p>
 <pre><code class=language-lua>local ffi         = require(&quot;ffi&quot;)
 local C           = ffi.C
@@ -204,7 +204,7 @@ end
 <p>同理比较后缀：</p>
 <pre><code class=language-lua>C.memcmp(ffi_cast(&quot;char *&quot;, s) + #s - #suffix, suffix, #suffix)
 </code></pre>
-<h5 id=2212-table>2.2.1.2 Table</h5>
+<h5 id=2212-table>2.2.1.2. Table</h5>
 <p>Table 是 Lua 中最常用的类型了，与其他语言比较的话相当于 PHP 的 Array 一样实用。</p>
 <p>Lua Table 需要注意的地方其一：</p>
 <blockquote>
@@ -267,8 +267,8 @@ end
         max_size = size
     end
 </code></pre>
-<h4 id=222-工具类>2.2.2 工具类</h4>
-<h5 id=2221-json-操作>2.2.2.1 JSON 操作</h5>
+<h4 id=222-工具类>2.2.2. 工具类</h4>
+<h5 id=2221-json-操作>2.2.2.1. JSON 操作</h5>
 <pre><code class=language-lua>local delay_tab = setmetatable({data = &quot;&quot;, force = false}, {
     __tostring = function(self)
         local res, err = encode(self.data, self.force)
@@ -291,7 +291,7 @@ function _M.delay_encode(data, force)
 end
 </code></pre>
 <p>设置了元表的 <code>__tostring</code> 方法，在字符串转换时才使用匿名函数调用 <code>json.encode</code>，在日志打印时，被忽略的日志会不执行 JSON 压缩，避免额外的性能损耗。</p>
-<h5 id=2222-lru-缓存>2.2.2.2 LRU 缓存</h5>
+<h5 id=2222-lru-缓存>2.2.2.2. LRU 缓存</h5>
 <p><a href=https://github.com/openresty/lua-resty-lrucache>lua-resty-lrucache</a> 在写入时会清理 TTL 过期的缓存，读时如果数据过期了，会作为第二个参数返回：</p>
 <pre><code class=language-lua>function _M.get(self, key)
     local hasht = self.hasht
@@ -444,7 +444,7 @@ end
 <blockquote>
 <p>Kong 使用的 <a href=https://github.com/thibaultcha/lua-resty-mlcache>lua-resty-mlcache</a> 库内部也使用 resty.lock 防止缓存击穿（可选）。</p>
 </blockquote>
-<h5 id=2223-后台任务>2.2.2.3 后台任务</h5>
+<h5 id=2223-后台任务>2.2.2.3. 后台任务</h5>
 <p>两个地方默认初始化了定时器（Nginx Timer）执行后台任务。</p>
 <ol>
 <li><code>init_by_lua</code> 阶段创建 OpenResty 特权进程，负责执行特定的后台任务，不会干扰其他 Worker 进程，权限相当于 root；</li>
@@ -502,8 +502,8 @@ function _M.init_worker()
 end
 </code></pre>
 <p>APISIX 引入特权进程的一个目的在于实现 Log Rotate 插件功能。</p>
-<h4 id=223-请求生命周期>2.2.3 请求生命周期</h4>
-<h5 id=2231-ctx>2.2.3.1 ctx</h5>
+<h4 id=223-请求生命周期>2.2.3. 请求生命周期</h4>
+<h5 id=2231-ctx>2.2.3.1. ctx</h5>
 <blockquote>
 <p>Use <code>ngx.ctx</code> wherever you can. <code>ngx.var</code> is much more expensive and is also limited to string values. The latter should only be used to exchange data with other nginx C modules.</p>
 <p>ref: <a href=https://github.com/openresty/lua-nginx-module/issues/1482>https://github.com/openresty/lua-nginx-module/issues/1482</a></p>
@@ -630,7 +630,7 @@ end
     }
 </code></pre>
 <p>部分 APISIX 路由匹配的内部参数在其他阶段注入。</p>
-<h5 id=2232-headers>2.2.3.2 headers</h5>
+<h5 id=2232-headers>2.2.3.2. headers</h5>
 <pre><code class=language-lua>-- 用 ngx.ctx table 缓存 headers, 避免再进行一次 ffi 调用
 local function _headers(ctx)
     if not ctx then
@@ -646,14 +646,14 @@ local function _headers(ctx)
 end
 </code></pre>
 <p>用到了上述的 ctx 库。</p>
-<h4 id=224-etcd>2.2.4 etcd</h4>
+<h4 id=224-etcd>2.2.4. etcd</h4>
 <p>etcd 在 APISIX 中作用相同与 PostgreSQL 之于 Kong，内部使用 <a href=https://github.com/api7/lua-resty-etcd>lua-resty-etcd</a> 作为客户端，使用 timer 定时执行和长轮询获取跟踪 etcd 中数据的变化。</p>
 <p>这里的优化点与 Kong 一样，在 <code>init_by_lua</code> 阶段进行数据的 warm up，之后数据会 fork 到其他的进程中。</p>
 <blockquote>
 <p>It does not really make much sense to use this library in the context of <a href=https://github.com/openresty/lua-nginx-module#lua_shared_dict>init_by_lua</a> because the cache will not get shared by any of the worker processes (unless you just want to &ldquo;warm up&rdquo; the cache with predefined items which will get inherited by the workers via <code>fork()</code>).</p>
 <p>ref: <a href=https://github.com/openresty/lua-resty-lrucache#description>https://github.com/openresty/lua-resty-lrucache#description</a></p>
 </blockquote>
-<h5 id=2241-初始化>2.2.4.1 初始化</h5>
+<h5 id=2241-初始化>2.2.4.1. 初始化</h5>
 <p>读取 etcd 数据到全局单例的 Lua table。</p>
 <pre><code class=language-lua>-- 初始化 etcd
 function _M.init()
@@ -743,7 +743,7 @@ local function create_formatter(prefix)
 end
 </code></pre>
 <p>这部分逻辑在 <code>init_by_lua</code> 执行，fork 到其他子进程。</p>
-<h5 id=2242-数据校验>2.2.4.2 数据校验</h5>
+<h5 id=2242-数据校验>2.2.4.2. 数据校验</h5>
 <p><code>schema_def.lua</code> 文件中定义了所有储存数据结构的 schema 校验规则，使用 <a href=https://github.com/api7/jsonschema>jsonschema</a> 库进行数据校验。</p>
 <p><code>core/schema.lua</code> 中使用 LRU 缓存校验器。</p>
 <p><code>load_full_data</code> 函数加载数据结构所需的 etcd kvs，并进行数据转换、校验、格式化、执行回调。</p>
@@ -800,7 +800,7 @@ end
     self.need_reload = false
 end
 </code></pre>
-<h5 id=2243-后台数据同步>2.2.4.3 后台数据同步</h5>
+<h5 id=2243-后台数据同步>2.2.4.3. 后台数据同步</h5>
 <p>利用 etcd watch 机制进行数据变更的同步。</p>
 <pre><code class=language-mermaid>graph TD
 	A[触发定时器] --&gt; C[同步数据]
@@ -874,7 +874,7 @@ local function _automatic_fetch(premature, self)
     end
 end
 </code></pre>
-<h5 id=2244-配置同步>2.2.4.4 配置同步</h5>
+<h5 id=2244-配置同步>2.2.4.4. 配置同步</h5>
 <p>封装上述的逻辑提供给 <code>routes</code>、<code>plugins</code>、<code>services</code> 等数据结构使用，每个数据结构监听自己的 prefix，同步数据并执行回调，通常在回调逻辑上触发更新，例如重新构建 Router、重新构建 plugins table 等。</p>
 <pre><code class=language-lua>-- etcd 配置创建
 function _M.new(key, opts)
@@ -956,11 +956,11 @@ function _M.new(key, opts)
     return obj
 end
 </code></pre>
-<h3 id=23-apisix-proxy>2.3 APISIX Proxy</h3>
+<h3 id=23-apisix-proxy>2.3. APISIX Proxy</h3>
 <p>源码中 Core 部分封装了数据获取的函数，在 API 网关主流程中通过 Nginx 生命周期串起来。</p>
 <h4 id=231-router>2.3.1. Router</h4>
 <p>APISIX 的 Router 匹配基于压缩字典树（Radix Tree）实现，主要使用 <a href=https://github.com/api7/lua-resty-radixtree>lua-resty-radixtree</a> 库。内置多种解析模式，这里只关注 HTTP 默认的 <code>radixtree_uri</code> 实现。</p>
-<h5 id=2311-路由构建>2.3.1.1 路由构建</h5>
+<h5 id=2311-路由构建>2.3.1.1. 路由构建</h5>
 <p><code>core.config.new</code> 调用的是 etcd 库（<code>config_etcd.lua</code>）维护的配置同步方法，返回原表，可以访问从 etcd 同步的数据。<code>core.schema.route</code> 包含了 route 这个数据结构的 schema 及校验规则，<code>check_route</code> 内部检查 route 直接绑定 plugin 的数据结构。</p>
 <blockquote>
 <p>APISIX 引入 route 直接绑定 plugin 的简化配置，不需要额外创建 plugin 对象。</p>
@@ -981,7 +981,7 @@ function _M.init_worker(filter)
 end
 </code></pre>
 <p><code>filter</code> 是回调函数，下述的流程中会注入。</p>
-<h5 id=2312-路由初始化>2.3.1.2 路由初始化</h5>
+<h5 id=2312-路由初始化>2.3.1.2. 路由初始化</h5>
 <p><code>router.http_init_worker</code> 中进行 Router 初始化。</p>
 <pre><code class=language-mermaid>graph TD
 	1[&quot;1. 加载不同模式的 router (uri/sni), 引入不同的 lua 库&quot;]
@@ -1037,7 +1037,7 @@ function _M.http_init_worker()
 end
 </code></pre>
 <p><code>http_router.user_routes</code> 储存在 router 的 table 中，会在路由匹配时用到（懒加载）。</p>
-<h5 id=2313-路由匹配>2.3.1.3 路由匹配</h5>
+<h5 id=2313-路由匹配>2.3.1.3. 路由匹配</h5>
 <p><code>access_by_lua</code> 阶段中进行路由匹配，将匹配结果（route、service）传递到 ctx 中供 balancer 请求上游。</p>
 <pre><code class=language-lua>do
     local uri_routes = {}
@@ -1073,10 +1073,10 @@ end
                 end
             })
 </code></pre>
-<h4 id=232-balancer>2.3.2 Balancer</h4>
+<h4 id=232-balancer>2.3.2. Balancer</h4>
 <p>Balancer 部分与 Kong 逻辑一致，甚至代码里函数名都一样，主要逻辑是 Service/Upstream 节点解析、负载均衡策略、健康检查与失败重试。</p>
 <p>APISIX 支持的一特性是外部服务发现，Kong 中默认支持通过 DNS 解析 Service host，根据 AAAA、A、SRV 记录添加 IP 与优先级，APISIX 支持了从 consul、eruka 和其他注册中心获取 IP 地址列表，并同步节点数据（长轮询）。</p>
-<h5 id=2321-服务发现>2.3.2.1 服务发现</h5>
+<h5 id=2321-服务发现>2.3.2.1. 服务发现</h5>
 <p>如果 serivce host 是域名, 通过外部注册中心进行服务发现，获取上游 IP 列表。</p>
 <pre><code class=language-lua>function _M.set_by_route(route, api_ctx)
    	...
@@ -1124,7 +1124,7 @@ end
     return
 end
 </code></pre>
-<h5 id=2322-负载均衡>2.3.2.2 负载均衡</h5>
+<h5 id=2322-负载均衡>2.3.2.2. 负载均衡</h5>
 <p>不同于 Kong 使用自己封装的 <a href=https://github.com/Kong/lua-resty-dns-client/tree/master/src/resty/dns/balancer>lua-resty-dns-client/balancer</a> 作为负载均衡器，APISIX 基于 <a href=https://github.com/openresty/lua-resty-balancer>lua-resty-balancer</a> 封装了负载均衡策略，基于 <a href=https://github.com/Kong/lua-resty-healthcheck>lua-resty-healthcheck</a>（fork 版本）实现节点健康检查。</p>
 <p>API 网关的负载均衡策略（Kong/APISIX）都是基于 OpenResty <a href=https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/balancer.md#set_current_peer>lua-resty-core/balancer</a> 提供的负载均衡函数实现，<code>set_current_peer</code> 设置当前请求上游地址，<code>set_more_tries</code> 设置请求失败重试次数，<code>get_last_failure</code> 获取上一次请求失败结果判断是否需要继续重试，<code>set_timeouts</code> 设置单个请求超时时间。</p>
 <pre><code class=language-mermaid>graph TD
@@ -1188,7 +1188,7 @@ local function set_balancer_opts(route, ctx)
 end
 </code></pre>
 <p>在 <code>access_by_lua</code> 阶段中服务发现，调用 balancer 库获取 peer 节点，<code>balancer_by_lua</code> 中从 ctx 中获取 peer 节点信息，访问后端节点，若失败重试（该阶段再次被调用），重新获取 peer 节点，重新创建请求（<code>recreate_request()</code>）再次访问后端节点。</p>
-<h4 id=233-plugin>2.3.3 Plugin</h4>
+<h4 id=233-plugin>2.3.3. Plugin</h4>
 <p>插件机制也与 Kong 类似，插件开发者可以定义 Schema 配置数据结构，以及 Handler 注入 Nginx 请求生命周期，API 网关提供核心的库供开发者使用（SDK）。</p>
 <p>APISIX 相比 Kong，开源的插件较多，插件 Schema 便于编写，同时插件只需要单文件，而 Kong 的插件通常是单独一个仓库，不方便维护。但是考虑到插件需要单独的 Test::Nginx 单元测试，单独一个仓库也未尝不可（Kong 还说了以后会把 Github 项目主仓库的插件代码移到单独的仓库）。</p>
 <p>具体各个阶段执行逻辑应该与 Kong 相同，即部分阶段插件开协程并发执行，部分阶段避免数据竞争，插件顺序执行。</p>
@@ -1197,7 +1197,7 @@ end
 <p>The apisix run both &ldquo;.access&rdquo; and &ldquo;.rewrite&rdquo; in the &ldquo;access&rdquo; phase.</p>
 <p>ref: <a href=https://github.com/apache/apisix/issues/1120#issuecomment-584949073>https://github.com/apache/apisix/issues/1120#issuecomment-584949073</a></p>
 </blockquote>
-<h5 id=2331-插件加载>2.3.3.1 插件加载</h5>
+<h5 id=2331-插件加载>2.3.3.1. 插件加载</h5>
 <p>插件列表从本地 yaml 文件获取，同时监听本地文件变化，同步配置；插件配置信息从 etcd 获取。</p>
 <pre><code class=language-lua>local init_plugins_syncer
 do
@@ -1264,7 +1264,7 @@ local function load(plugin_names)
 end
 </code></pre>
 <p>插件配置信息 <code>plugin_meta</code> 也加载到 Lua table 中，在插件匹配的时候会获取。</p>
-<h5 id=2332-插件匹配>2.3.3.2 插件匹配</h5>
+<h5 id=2332-插件匹配>2.3.3.2. 插件匹配</h5>
 <p>插件过滤，遍历插件列表，匹配开启的插件，O(n) 操作 <code>plugin.filter(route)</code> ：</p>
 <pre><code class=language-lua>-- 插件配置绑定
 function _M.filter(user_route, plugins)
@@ -1287,7 +1287,7 @@ function _M.filter(user_route, plugins)
     return plugins
 end
 </code></pre>
-<h5 id=2333-插件执行>2.3.3.3 插件执行</h5>
+<h5 id=2333-插件执行>2.3.3.3. 插件执行</h5>
 <p>这里以 <code>access_by_lua</code> 阶段插件执行逻辑为例，根据 Route、Service 匹配插件，创建临时 Table 储存 plugin 和 plugin_conf，存入 ctx 中。</p>
 <pre><code class=language-lua>        -- 插件过滤, 遍历插件列表, 匹配开启的插件, O(n)
         local plugins = plugin.filter(route)
@@ -1314,9 +1314,9 @@ end
         -- 执行 access 阶段
         plugin.run_plugin(&quot;access&quot;, plugins, api_ctx)
 </code></pre>
-<h4 id=234-主流程>2.3.4 主流程</h4>
+<h4 id=234-主流程>2.3.4. 主流程</h4>
 <p>以 Nginx HTTP Subsystem 为例分析主要执行逻辑，其中一些核心逻辑已在上述小节中流程分析过。</p>
-<h5 id=2331-init_by_lua>2.3.3.1 init_by_lua</h5>
+<h5 id=2331-init_by_lua>2.3.3.1. init_by_lua</h5>
 <pre><code class=language-mermaid>graph TD
 	1[&quot;1. 加载 resty.core&quot;]
 	2[&quot;2. ngx.re JIT 缓存参数优化&quot;]
@@ -1359,7 +1359,7 @@ end
     end
 end
 </code></pre>
-<h5 id=2332-init_worker_by_lua>2.3.3.2 init_worker_by_lua</h5>
+<h5 id=2332-init_worker_by_lua>2.3.3.2. init_worker_by_lua</h5>
 <pre><code class=language-mermaid>graph TD
 	1[&quot;1. random seed 初始化&quot;]
 	2[&quot;2. 外部服务发现 (默认没有开启, consul, dubbo)&quot;]
@@ -1439,7 +1439,7 @@ end
     end
 end
 </code></pre>
-<h5 id=2333-access_by_lua>2.3.3.3 access_by_lua</h5>
+<h5 id=2333-access_by_lua>2.3.3.3. access_by_lua</h5>
 <pre><code class=language-lua>-- access_by_lua 阶段, apisix 没有 rewrite_by_lua
 -- ref: https://github.com/apache/apisix/issues/1120
 -- ref: https://github.com/apache/apisix/issues/1120#issuecomment-584949073
@@ -1566,8 +1566,8 @@ function _M.http_access_phase()
     end
 end
 </code></pre>
-<h2 id=三一些思考>三、一些思考</h2>
-<h3 id=21-边缘计算>2.1 边缘计算</h3>
+<h2 id=3-一些思考>3. 一些思考</h2>
+<h3 id=21-边缘计算>2.1. 边缘计算</h3>
 <blockquote>
 <p>对于互联网设备，网络边缘是设备或包含设备的本地网络与互联网通信的位置。边缘是个比较模糊的术语。例如，可以将用户的计算机或 IoT 摄像头内部的处理器视为网络边缘，但也可以将用户的路由器、ISP 或本地边缘服务器视为边缘。重要的是，网络边缘在地理位置上靠近设备，与<a href=https://www.cloudflare.com/learning/cdn/glossary/origin-server/>源站</a>和云服务器不同，后者可能与它们相互通信的设备相距很远。</p>
 <p>完全减轻额外硬件需求的一种方法是利用边缘服务器。例如，借助 Cloudflare 分散在全球各地的 194 个边缘服务器网络，Cloudflare 的客户可以使用 <a href=https://www.cloudflare.com/products/cloudflare-workers/>Cloudflare Workers</a> 在全球范围内运行边缘代码。</p>
@@ -1596,7 +1596,7 @@ end
 <figure class=image>
 <img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/image-20210611160137790.png alt loading=lazy>
 </figure></p>
-<h4 id=211-lua-serverless>2.1.1 Lua (Serverless)</h4>
+<h4 id=211-lua-serverless>2.1.1. Lua (Serverless)</h4>
 <p>APISIX 的 Serverless 插件功能支持注入任何 Lua 脚本，Kong 也支持对应的功能，APISIX 就是抄的 Kong 的插件功能。</p>
 <blockquote>
 <p>ref: <a href=https://github.com/apache/apisix/blob/master/docs/en/latest/plugins/serverless.md>https://github.com/apache/apisix/blob/master/docs/en/latest/plugins/serverless.md</a></p>
@@ -1606,7 +1606,7 @@ end
 <img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/image-20210611160354452.png alt loading=lazy>
 </figure></p>
 <p>只支持最简单的函数执行。</p>
-<h4 id=212-wasm-vm>2.1.2 WASM VM</h4>
+<h4 id=212-wasm-vm>2.1.2. WASM VM</h4>
 <p>LuaJIT 的 FFI 功能能非常方便和高性能地调用 C lib，能通过 C 进行内存管理，或者交由 LuaJIT 自动 gc（该部分还在学习中）。</p>
 <p>出于性能最好的开源 WASM VM 引擎 <a href=https://github.com/WasmEdge/WasmEdge>WasmEdge</a>（C++ 编写）提供 C API，我尝试在 LuaJIT 中加载 <code>.so</code> 调用 WasmEdge 创建 VM 虚拟机（VMContext），执行 <code>.wasm</code> 文件。</p>
 <blockquote>
@@ -1691,7 +1691,7 @@ local result = wasmedge.WasmEdge_VMRunWasmFromFile(vmctx, test_wasm_add_path,
 ERROR [default]     Mismatched function type. Expected: params{i32 , i32} returns{i32} , Got: params{} returns{i32}
 </code></pre>
 <p>看上去直到参数传入为止还没问题，后续再继续研究。</p>
-<h3 id=22-mesh>2.2 Mesh</h3>
+<h3 id=22-mesh>2.2. Mesh</h3>
 <p>APISIX 网关的 Mesh 项目，<del>应该是从 Kong 抄过来的</del>。</p>
 <blockquote>
 <p>ref: <a href=https://github.com/api7/apisix-mesh-agent>https://github.com/api7/apisix-mesh-agent</a></p>
@@ -1728,7 +1728,7 @@ require (
 	istio.io/istio v0.0.0-20210308180034-f6502508b04c
 )
 </code></pre>
-<h3 id=23-网关选型>2.3 网关选型</h3>
+<h3 id=23-网关选型>2.3. 网关选型</h3>
 <p>APISIX 网关相当于 Kong 的重构，性能高于 Kong，资源占用较低，二次开发较为方便。但是公司内部使用的 Kong 网关目前接入了 Kong Ingress Controller，虚拟机注册的部分也用的是 Kong 开源的 Go 包，生态较为丰富。</p>
 <p>APISIX 目前还没提供 Go 的 SDK。APISIX 开源的 Traffic Split 以及 Mirror 插件也不足以满足公司流量牵引的需求。</p>
 <p>我认为公司目前仍可以继续使用 Kong 网关，经历本次 APISIX 源码阅读，与 OpenResty 相关体系的学习后二次开发能力有所提升。</p>
