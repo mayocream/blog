@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1632724999" media=all>
+<link rel=stylesheet href="/bundle.css?v=1632725210" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://unavatar.io/twitter/Freeze_Mayo><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://shoujo.ink/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/>
@@ -1709,96 +1709,6 @@ require (
 <p>APISIX 网关相当于 Kong 的重构，性能高于 Kong，资源占用较低，二次开发较为方便。但是公司内部使用的 Kong 网关目前接入了 Kong Ingress Controller，虚拟机注册的部分也用的是 Kong 开源的 Go 包，生态较为丰富。</p>
 <p>APISIX 目前还没提供 Go 的 SDK。APISIX 开源的 Traffic Split 以及 Mirror 插件也不足以满足公司流量牵引的需求。</p>
 <p>我认为公司目前仍可以继续使用 Kong 网关，经历本次 APISIX 源码阅读，与 OpenResty 相关体系的学习后二次开发能力有所提升。</p>
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>公司需求</th>
-<th>公司 Kong 网关功能</th>
-<th>若迁移 APISIX</th>
-<th>迁移成本</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>1</td>
-<td>边界网关-K8s</td>
-<td>Ingress Controller 二次开发，添加了基于注解添加插件、修改协议的功能</td>
-<td>需要阅读 APISIX Ingress Controller 源码，添加相应功能</td>
-<td>中</td>
-</tr>
-<tr>
-<td>2</td>
-<td>边界网关-虚拟机</td>
-<td>开发网关 Wrapper，Golang 开发使用 Kong 的 Go 语言 SDK，较为方便</td>
-<td>要对接 APISIX HTTP 接口，实现 Golang SDK</td>
-<td>高</td>
-</tr>
-<tr>
-<td>3</td>
-<td>边界网关-日志流转</td>
-<td>通过 Filebeat 采集，格式为 Kong 的日志格式</td>
-<td>需要对 APISIX 输出日志格式做调整，在网关做，或者 Filebeat 处理</td>
-<td>中</td>
-</tr>
-<tr>
-<td>4</td>
-<td>边界网关-公司服务ID</td>
-<td>插件获取公司服务唯一标识，添加到日志和 Prometheus Metrics 中</td>
-<td>需要开发插件实现相应功能</td>
-<td>中</td>
-</tr>
-<tr>
-<td>5</td>
-<td>边界网关-Metrics</td>
-<td>Kong Prometheus 提供的 Metrics 指标</td>
-<td>需要修改指标，或影响 MSP 面板展示</td>
-<td>高</td>
-</tr>
-<tr>
-<td>6</td>
-<td>Ingress-公司部署数据</td>
-<td>Ingress Controller 二次开发，添加发送数据到 Redis 集群的功能</td>
-<td>需要二次开发 Ingress Controller 实现功能</td>
-<td>中</td>
-</tr>
-<tr>
-<td>7</td>
-<td>网关 Wrapper</td>
-<td>接入 Kong SDK、以及 Kong 背后 PostgreSQL</td>
-<td>接入 APISIX，以及背后 etcd</td>
-<td>高</td>
-</tr>
-<tr>
-<td>8</td>
-<td>网关-WAF</td>
-<td>Kong 插件实现 WAF，底层 resty-waf 库可独立运行</td>
-<td>APISIX 插件实现 WAF</td>
-<td>低</td>
-</tr>
-<tr>
-<td>9</td>
-<td>公司 K8s 接入</td>
-<td>Ingress 注解里有 Kong 字段</td>
-<td>修改 Ingress 注解</td>
-<td>中</td>
-</tr>
-<tr>
-<td>10</td>
-<td>网关部署</td>
-<td>Ansible + Helm</td>
-<td>Ansible 脚本需要调整，Helm 需要调整</td>
-<td>中</td>
-</tr>
-<tr>
-<td>11</td>
-<td>流量迁移</td>
-<td>Ingress Controller 二次开发</td>
-<td>Ingress Controller 二次开发</td>
-<td>高</td>
-</tr>
-</tbody>
-</table>
 <p>如果要将公司网关从 Kong 迁移到 APISIX 的附加成本很高，开发、迁移、其他部门协调时间至少需要 2 周，对比起来收益并不大，公司现在并不缺少 APISIX 的功能。</p>
 <p>阅读过源码后 APISIX 唯一比较好的功能点是支持外部注册中心，公司使用 Bilibili discovery 注册中心二次开发版本，接入注册中心后能够获取到服务更多元数据，便于后续在网关对服务进行治理。Kong 网关社区有 Consul 接入的讨论，可以继续关注该 Issue 进展，或为社区提议开发相应功能。</p>
 <p>APISIX 网关中使用到的 LuaJIT 和 OpenResty 的 Coding 性能优化技巧可以学习。</p>
