@@ -5,6 +5,8 @@ date: "2021-09-21"
 
 ## Mayo
 
+![](https://github.com/mayocream.png)
+
 <canvas id="year" style="width: 16px" width="32" height="32"></canvas><noscript>17</noscript> y/o.
 <script type="module">
   const year = new Date().getFullYear().toString().substr(-2)
