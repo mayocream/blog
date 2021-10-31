@@ -21,7 +21,6 @@ favicon_url = "https://github.com/mayocream.png"
 
 [params.social]
 github = "mayocream"
-twitter = "Freeze_Mayo"
 
 [[menu.main]]
 name = "About"
