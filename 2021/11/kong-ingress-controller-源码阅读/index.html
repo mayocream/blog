@@ -1,0 +1,1106 @@
+<!doctype html><html lang=zh-hans><head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Kong ingress controller 源码阅读 - Mayo's Blog</title>
+<meta name=description content="该程序启动后有以下主要步骤： 从命令行和环境变量解析入参 (# flags.go) 尝试与 Kubernetes API Server 建立连接 (# func createApiserverClient) 与 Kong Admin API 通信 (# func kong.NewClient) 创建监听资源变化的 Informer 创建资源锁竞争选举">
+<meta name=author content>
+<link rel=preconnect href=https://cdn.jsdelivr.net>
+<link rel=preconnect href=https://fonts.googleapis.com>
+<link rel=preconnect href=https://fonts.gstatic.com crossorigin>
+<link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
+<link rel=stylesheet href="/bundle.css?v=1636176961" media=all>
+<link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
+<link rel=icon href=https://github.com/mayocream.png><meta name=generator content="Hugo 0.88.1">
+<link rel=canonical href=https://shoujo.ink/2021/11/kong-ingress-controller-%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/>
+<script type=application/javascript>var doNotTrack=!1;doNotTrack||(window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)},ga.l=+new Date,ga('create','G-JKVXF5HSKT','auto'),ga('send','pageview'))</script>
+<script async src=https://www.google-analytics.com/analytics.js></script>
+<meta property="og:title" content="Kong ingress controller 源码阅读">
+<meta property="og:description" content="该程序启动后有以下主要步骤： 从命令行和环境变量解析入参 (# flags.go) 尝试与 Kubernetes API Server 建立连接 (# func createApiserverClient) 与 Kong Admin API 通信 (# func kong.NewClient) 创建监听资源变化的 Informer 创建资源锁竞争选举">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://shoujo.ink/2021/11/kong-ingress-controller-%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/"><meta property="article:section" content="posts">
+<meta property="article:published_time" content="2021-11-06T13:30:00+08:00">
+<meta property="article:modified_time" content="2021-11-06T13:30:00+08:00"><meta property="og:site_name" content="Mayo's Blog">
+</head>
+</html>
+<body><script src=https://cdn.jsdelivr.net/npm/darkmode-js@1.5.7/lib/darkmode-js.min.js></script>
+<script>const opts={bottom:'32px',right:'unset',left:'32px',time:'0.3s',mixColor:'#fff',backgroundColor:'#fff',buttonColorDark:'#100f2c',buttonColorLight:'#fff',saveInCookies:!0,label:'🌓',autoMatchOsTheme:!0};let darkmode;window.matchMedia('only screen and (min-width: 680px)').matches?(darkmode=new Darkmode(opts),darkmode.showWidget()):(localStorage.removeItem('darkmode'),darkmode=new Darkmode(opts)),window.darkmode=darkmode,document.addEventListener('DOMContentLoaded',function(){document.body.style.opacity=1})</script>
+<main class=page-content aria-label=Content>
+<div class=wrapper><nav class=site-nav>
+<a class=page-link href=/posts/>Posts</a>
+<a class=page-link href=/about/>About</a>
+</nav><header class=post-header>
+<a class=site-title href=https://shoujo.ink>Mayo's Blog</a>
+<h1 class="post-title baseline-fix typeface-sans" lang=zh-hans itemprop="name headline">Kong ingress controller 源码阅读</h1>
+</header>
+<div class=post-cover aria-label=Cover>
+<div class=post-cover-wrapper>
+<img src alt>
+</div>
+<div class=cover-meta></div>
+</div>
+<div class=post-layout>
+<article class="post typeface-sans" lang=zh-hans itemscope itemtype=http://schema.org/BlogPosting>
+<div class=post-content itemprop=articleBody>
+<p>
+<figure class=image>
+<img src=/2021/11/kong-ingress-controller-%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/images/flow.png alt loading=lazy>
+</figure></p>
+<p>该程序启动后有以下主要步骤：</p>
+<ol>
+<li>从命令行和环境变量解析入参 (# flags.go)</li>
+<li>尝试与 Kubernetes API Server 建立连接 (# func createApiserverClient)</li>
+<li>与 Kong Admin API 通信 (# func kong.NewClient)</li>
+<li>创建监听资源变化的 Informer</li>
+<li>创建资源锁竞争选举 Leader (# election.go)</li>
+<li>队列定时执行同步函数</li>
+</ol>
+<p>下面会对其中关键步骤进行解析。</p>
+<h3 id=1-目录结构>1. 目录结构</h3>
+<pre><code>├───cli
+│   └───ingress-controller
+│           flags.go                 // 参数解析
+│           main.go
+│           util.go
+│           version.go
+├───internal
+│   ├───admission                   // Validation Admission Webhook 相关
+│   │
+│   └───ingress
+│       ├───annotations
+│       │       annotations.go      // 解析注解
+│       │       annotations_test.go
+│       │
+│       ├───controller
+│       │   │   controller.go
+│       │   │   event_handler.go    // ResourceEventHandler
+│       │   │   kong.go             // Kong 相关函数
+│       │   │
+│       │   └───parser
+│       │           parser.go       // Store 转换为 Kong Store 函数
+│       │
+│       ├───election
+│       │       election.go         // 选举
+│       │
+│       ├───store
+│       │       store.go            // 封装 Store
+│       │
+│       ├───task
+│       │       queue.go            // 封装队列
+│       │
+│       └───utils               // 工具类
+│               k8s.go
+│               reports.go      // 匿名上报
+│               types.go
+│
+└───pkg
+    ├───apis
+    │   └───configuration // 序列化 JSON 结构定义
+    │
+    └───client
+        └───configuration // CRD Model 定义
+
+</code></pre>
+<h3 id=2-核心代码块>2. 核心代码块</h3>
+<h4 id=21-创建-informer>2.1 创建 Informer</h4>
+<ul>
+<li>k8s 原生资源通过 client-go 包提供的 Informer 监听变化；</li>
+<li>CRD 资源通过封装在 pkg 目录下封装的 Informer 监听变化。</li>
+</ul>
+<pre><code class=language-go>    // k8s 原生资源 Informer
+    coreInformerFactory := informers.NewSharedInformerFactoryWithOptions(
+        kubeClient,
+        cliConfig.SyncPeriod, //时间间隔
+        informers.WithNamespace(cliConfig.WatchNamespace),
+    )
+    // CRD 自定义资源 Informer
+    kongInformerFactory := configinformer.NewSharedInformerFactoryWithOptions(
+        confClient,
+        cliConfig.SyncPeriod,
+        configinformer.WithNamespace(cliConfig.WatchNamespace),
+    )
+    ...
+    // Informer 被添加回调函数处理 Event 
+    ingInformer.AddEventHandler(reh)
+
+	stopCh := make(chan struct{})
+	for _, informer := range informers {
+        // 协程执行 Informer
+		go informer.Run(stopCh)
+		synced = append(synced, informer.HasSynced)
+	}
+</code></pre>
+<p><code>SyncPeriod</code> 最小限制为 10 秒，默认监听所有 Namespace。</p>
+<p>下面来看 Informer 返回的 Event 处理部分：</p>
+<pre><code class=language-go>	// 创建接收 Event 的通道
+	updateChannel := channels.NewRingChannel(1024)
+    // Informer 回调 Handler
+	reh := controller.ResourceEventHandler{
+		UpdateCh:           updateChannel,
+		IsValidIngresClass: annotations.IngressClassValidatorFunc(cliConfig.IngressClass),
+        // 根据 ingress-class 注解过滤资源对象
+	}
+
+...
+    // 主进程中接收通道信号，并压入队列定时处理
+	for {
+		select {
+		case event := &lt;-n.updateCh.Out():
+			if v := atomic.LoadUint32(&amp;n.isShuttingDown); v != 0 {
+				return
+			}
+			if evt, ok := event.(Event); ok {
+				glog.V(3).Infof(&quot;Event %v received - object %v&quot;, evt.Type, evt.Obj)
+                // 加入定时执行同步函数的队列
+				n.syncQueue.Enqueue(evt.Obj)
+				// TODO retry for ephermal error conditions
+				// This function is called outside the task queue because event
+				// information is currently shielded from the sync function.
+				// Sync function syncs everything, no matter what the event is
+				err := n.handleBasicAuthUpdates(evt)
+				if err != nil {
+					glog.Errorf(&quot;error handling basic-auth update: %v&quot;, err)
+				}
+			} else {
+				glog.Warningf(&quot;unexpected event type received: %T&quot;, event)
+			}
+		case &lt;-n.stopCh:
+			return
+		}
+	}
+</code></pre>
+<h4 id=22-创建资源锁竞争选举>2.2 创建资源锁竞争选举</h4>
+<p>Controller 可以部署分布式多实例，为了避免重复对 Admin API 进行操作，导致混乱，程序在启动阶段通过 k8s ConfigMap 资源锁进行选举 Leader。</p>
+<p>选举有以下步骤：</p>
+<ul>
+<li>创建 ConfigMapLock，基于 etcd 幂等性只有一个程序获得资源</li>
+<li>抢到锁的实例定时 renew 续期</li>
+<li>其他实例根据最后续期时间判断锁是否有效，否则竞争创建锁</li>
+</ul>
+<pre><code class=language-go>// NewElector returns an instance of Elector based on config.
+func NewElector(config Config) Elector {
+	pod, err := utils.GetPodDetails(config.Client)
+	if err != nil {
+		glog.Fatalf(&quot;unexpected error obtaining pod information: %v&quot;, err)
+	}
+
+	es := elector{
+		Config: config,
+	}
+
+	broadcaster := record.NewBroadcaster()
+	hostname, _ := os.Hostname()
+
+	recorder := broadcaster.NewRecorder(scheme.Scheme, apiv1.EventSource{
+		Component: &quot;ingress-leader-elector&quot;,
+		Host:      hostname,
+	})
+
+    // 定义 ConfigMapLock 资源锁结构
+	lock := resourcelock.ConfigMapLock{
+		ConfigMapMeta: metav1.ObjectMeta{Namespace: pod.Namespace,
+			Name: config.ElectionID},
+		Client: config.Client.CoreV1(),
+		LockConfig: resourcelock.ResourceLockConfig{
+			Identity:      pod.Name,
+			EventRecorder: recorder,
+		},
+	}
+
+	ttl := 30 * time.Second
+    
+    // 调用 client-go leaderelection 包进行选举
+	le, err := leaderelection.NewLeaderElector(
+		leaderelection.LeaderElectionConfig{
+			Lock:            &amp;lock,
+			LeaseDuration:   ttl,      // 锁有效时间
+			RenewDeadline:   ttl / 2,  // 续期间隔
+			RetryPeriod:     ttl / 4,
+			Callbacks:       config.Callbacks,
+			ReleaseOnCancel: true,
+		})
+
+	if err != nil {
+		glog.Fatalf(&quot;unexpected error starting leader election: %v&quot;, err)
+	}
+
+    // 储存选举信息
+	es.elector = le
+	return es
+}
+
+...
+
+    // 在执行同步函数开始时判断，非 Leader 直接退出
+	// If in-memory mode, each Kong instance runs with its own controller
+	if !n.cfg.Kong.InMemory &amp;&amp;
+		!n.elector.IsLeader() {
+		glog.V(2).Infof(&quot;skipping synchronization of configuration because I am not the leader.&quot;)
+		return nil
+	}
+</code></pre>
+<h4 id=23-队列执行同步函数>2.3 队列执行同步函数</h4>
+<h5 id=231-创建队列>2.3.1 创建队列</h5>
+<p>queue.go 文件里定义了队列结构体和运行函数，内部使用 client-go workqueue 包，队列配置有 RateLimit，避免频繁对 Admin API 进行操作。</p>
+<p>来看一下 Queue 结构体定义。</p>
+<pre><code class=language-go>type Queue struct {
+    // k8s.io/client-go/util/workqueue 库
+	// queue is the work queue the worker polls
+	queue workqueue.RateLimitingInterface
+	// sync is called for each item in the queue
+	sync func(interface{}) error
+	// workerDone is closed when the worker exits
+	workerDone chan bool
+
+    // queue 元素 Key 生成函数
+	fn func(obj interface{}) (interface{}, error)
+
+	lastSync int64
+}
+
+// queue 中包含的结构体
+// Element represents one item of the queue
+type Element struct {
+	Key       interface{}
+	Timestamp int64
+}
+</code></pre>
+<p><code>fn()</code> 使用 <code>DeletionHandlingMetaNamespaceKeyFunc</code> 函数生成 API 资源的 Key，该函数会返回删除资源的 Key 或 namespace/name 格式的 Key。</p>
+<p>关注队列消费的方法：</p>
+<pre><code class=language-go>// worker processes work in the queue through sync.
+func (t *Queue) worker() {
+   for {
+      key, quit := t.queue.Get()
+      if quit {
+         if !isClosed(t.workerDone) {
+            close(t.workerDone)
+         }
+         return
+      }
+      ts := time.Now().UnixNano()
+
+      // 判断队列内事件是否有效
+      item := key.(Element)
+      if t.lastSync &gt; item.Timestamp {
+         glog.V(3).Infof(&quot;skipping %v sync (%v &gt; %v)&quot;, item.Key, t.lastSync, item.Timestamp)
+         t.queue.Forget(key)
+         t.queue.Done(key)
+         continue
+      }
+
+      glog.V(3).Infof(&quot;syncing %v&quot;, item.Key)
+      // 对每个队列内元素执行 sync 函数
+      if err := t.sync(key); err != nil {
+         glog.Warningf(&quot;requeuing %v, err %v&quot;, item.Key, err)
+         // 执行错误，限速
+         t.queue.AddRateLimited(Element{
+            Key:       item.Key,
+            Timestamp: time.Now().UnixNano(),
+         })
+      } else {
+         // 执行成功
+         t.queue.Forget(key)
+         t.lastSync = ts
+      }
+
+      t.queue.Done(key)
+   }
+}
+</code></pre>
+<h5 id=232-解析资源>2.3.2 解析资源</h5>
+<p><code>parser.go</code> 中 <code>Build()</code> 方法解析 k8s 内资源到自定义资源格式，主要职责为格式转换和将多个数据源的数据进行组合，生成期望的数据格式。</p>
+<pre><code class=language-go>// Build creates a Kong configuration from Ingress and Custom resources
+// defined in Kuberentes.
+// It throws an error if there is an error returned from client-go.
+func (p *Parser) Build() (*KongState, error) {
+	var state KongState
+	ings := p.store.ListIngresses()
+	tcpIngresses, err := p.store.ListTCPIngresses()
+	if err != nil {
+		glog.Errorf(&quot;error listing TCPIngresses: %v&quot;, err)
+	}
+	// 解析、合并 Ingress、和自定义 TCPIngress 资源
+    // 生成 Service 和 Route
+	parsedInfo := p.parseIngressRules(ings, tcpIngresses)
+
+    // 关联 k8s Service 资源
+    // populate Kubernetes Service
+	for key, service := range parsedInfo.ServiceNameToServices {
+        // 通过 client-go Storer 获取 Service
+		k8sSvc, err := p.store.GetService(service.Namespace, service.Backend.Name)
+		if err != nil {
+			glog.Errorf(&quot;getting service: %v&quot;, err)
+		}
+		if k8sSvc != nil {
+            // 获取到 Service 则关联
+			service.K8sService = *k8sSvc
+		}
+		parsedInfo.ServiceNameToServices[key] = service
+	}
+    
+	// add the routes and services to the state
+	for _, service := range parsedInfo.ServiceNameToServices {
+		state.Services = append(state.Services, service)
+	}
+
+	// 生成 Upstream 和 Target
+	state.Upstreams = p.getUpstreams(parsedInfo.ServiceNameToServices)
+
+    // 生成其他资源
+	// generate consumers and credentials
+	p.fillConsumersAndCredentials(&amp;state)
+
+	// process annotation plugins
+	state.Plugins = p.fillPlugins(state)
+
+	// generate Certificates and SNIs
+	state.Certificates = p.getCerts(parsedInfo.SecretNameToSNIs)
+
+	// populate CA certificates in Kong
+	state.CACertificates, err = p.getCACerts()
+	if err != nil {
+		return nil, err
+	}
+
+	return &amp;state, nil
+}
+</code></pre>
+<h6 id=2321-资源结构定义>2.3.2.1 资源结构定义</h6>
+<p>Controller 定义了一些结构体储存 k8s 资源和 Kong 对应的资源。</p>
+<pre><code class=language-go>// KongState holds the configuration that should be applied to Kong.
+type KongState struct {
+   Services       []Service
+   Upstreams      []Upstream
+   Certificates   []Certificate
+   CACertificates []kong.CACertificate
+   Plugins        []Plugin
+   Consumers      []Consumer
+}
+
+// Service represents a service in Kong and holds routes associated with the
+// service and other k8s metadata.
+type Service struct {
+	kong.Service
+	Backend    backend
+	Namespace  string
+	Routes     []Route
+	Plugins    []kong.Plugin
+	K8sService corev1.Service
+}
+
+// Route represents a Kong Route and holds a reference to the Ingress
+// rule.
+type Route struct {
+	kong.Route
+
+	// Ingress object associated with this route
+	Ingress networking.Ingress
+	// TCPIngress object associated with this route
+	TCPIngress configurationv1beta1.TCPIngress
+	// Is this route coming from TCPIngress or networking.Ingress?
+	IsTCP   bool
+	Plugins []kong.Plugin
+}
+...
+</code></pre>
+<p>结构体包含了 k8s 自身资源的信息，和解析到 Kong 资源格式的对应信息。</p>
+<h6 id=2322-解析-ingress>2.3.2.2 解析 Ingress</h6>
+<p>该方法的职能为排序去重 Ingress 规则，合并 TCPIngress 规则，创建</p>
+<pre><code class=language-go>func (p *Parser) parseIngressRules(
+   // k8s Ingress 资源
+   ingressList []*networking.Ingress,
+   // 自定义 TCPIngress 资源
+   tcpIngressList []*configurationv1beta1.TCPIngress) *parsedIngressRules {
+
+   // 按照时间排序
+   sort.SliceStable(ingressList, func(i, j int) bool {
+      return ingressList[i].CreationTimestamp.Before(
+         &amp;ingressList[j].CreationTimestamp)
+   })
+
+   sort.SliceStable(tcpIngressList, func(i, j int) bool {
+      return tcpIngressList[i].CreationTimestamp.Before(
+         &amp;tcpIngressList[j].CreationTimestamp)
+   })
+
+   // generate the following:
+   // Services and Routes
+   var allDefaultBackends []networking.Ingress
+   secretNameToSNIs := make(map[string][]string)
+   serviceNameToServices := make(map[string]Service)
+
+   for i := 0; i &lt; len(ingressList); i++ {
+      ingress := *ingressList[i]
+      ingressSpec := ingress.Spec
+
+      if ingressSpec.Backend != nil {
+         allDefaultBackends = append(allDefaultBackends, ingress)
+
+      }
+
+      processTLSSections(ingressSpec.TLS, ingress.Namespace, secretNameToSNIs)
+
+      for i, rule := range ingressSpec.Rules {
+         host := rule.Host
+         if rule.HTTP == nil {
+            continue
+         }
+         for j, rule := range rule.HTTP.Paths {
+            path := rule.Path
+
+            if strings.Contains(path, &quot;//&quot;) {
+               glog.Errorf(&quot;ingress rule skipped in Ingress'%v/%v', &quot;+
+                  &quot;'%v' is an invalid path&quot;, ingress.Namespace,
+                  ingress.Name, path)
+               continue
+            }
+            if path == &quot;&quot; {
+               path = &quot;/&quot;
+            }
+            
+            // 创建 Route 结构体
+            r := Route{
+               Ingress: ingress,
+               Route: kong.Route{
+                  // TODO Figure out a way to name the routes
+                  // This is not a stable scheme
+                  // 1. If a user adds a route in the middle,
+                  // due to a shift, all the following routes will
+                  // be PATCHED
+                  // 2. Is it guaranteed that the order is stable?
+                  // Meaning, the routes will always appear in the same
+                  // order?
+                  Name:          kong.String(ingress.Namespace + &quot;.&quot; + ingress.Name + &quot;.&quot; + strconv.Itoa(i) + strconv.Itoa(j)),
+                  Paths:         kong.StringSlice(path),
+                  StripPath:     kong.Bool(false),
+                  PreserveHost:  kong.Bool(true),
+                  Protocols:     kong.StringSlice(&quot;http&quot;, &quot;https&quot;),
+                  RegexPriority: kong.Int(0),
+               },
+            }
+            if host != &quot;&quot; {
+               // Route 域名地址
+               r.Hosts = kong.StringSlice(host)
+            }
+
+            // 创建 Service 结构体
+            serviceName := ingress.Namespace + &quot;.&quot; +
+               rule.Backend.ServiceName + &quot;.&quot; +
+               rule.Backend.ServicePort.String()
+            service, ok := serviceNameToServices[serviceName]
+            if !ok {
+               service = Service{
+                  // Kong 的 Service 对象
+                  Service: kong.Service{
+                     Name: kong.String(serviceName),
+                     // Upstream 地址，后续创建 Upstream 使用相同地址
+                     Host: kong.String(rule.Backend.ServiceName +
+                        &quot;.&quot; + ingress.Namespace + &quot;.&quot; +
+                        rule.Backend.ServicePort.String() + &quot;.svc&quot;),
+                     Port:           kong.Int(80),
+                     Protocol:       kong.String(&quot;http&quot;),
+                     Path:           kong.String(&quot;/&quot;),
+                     ConnectTimeout: kong.Int(60000),
+                     ReadTimeout:    kong.Int(60000),
+                     WriteTimeout:   kong.Int(60000),
+                     Retries:        kong.Int(5),
+                  },
+                  Namespace: ingress.Namespace,
+                  Backend: backend{
+                     Name: rule.Backend.ServiceName,
+                     Port: rule.Backend.ServicePort,
+                  },
+               }
+            }
+            // 关联 Service 与 Route
+            service.Routes = append(service.Routes, r)
+            serviceNameToServices[serviceName] = service
+         }
+      }
+   }
+
+   return &amp;parsedIngressRules{
+      SecretNameToSNIs:      secretNameToSNIs,
+      ServiceNameToServices: serviceNameToServices,
+   }
+}
+</code></pre>
+<h6 id=2323-解析-endpoints>2.3.2.3 <strong>解析 Endpoints</strong></h6>
+<p>生成 Upstream 结构体：</p>
+<pre><code class=language-go>func (p *Parser) getUpstreams(serviceMap map[string]Service) []Upstream {
+	var upstreams []Upstream
+	for _, service := range serviceMap {
+        // 这里的 Upstream 名称与 Service 里的 Host 地址一致
+		upstreamName := service.Backend.Name + &quot;.&quot; + service.Namespace + &quot;.&quot; + service.Backend.Port.String() + &quot;.svc&quot;
+		upstream := Upstream{
+			Upstream: kong.Upstream{
+				Name: kong.String(upstreamName),
+			},
+			Service: service,
+		}
+        // 获取 Targets
+		targets := p.getServiceEndpoints(service.K8sService,
+			service.Backend.Port.String())
+		upstream.Targets = targets
+		upstreams = append(upstreams, upstream)
+	}
+	return upstreams
+}
+</code></pre>
+<p>获取 Endpoint 生成 Target 结构体：</p>
+<pre><code class=language-go>// 接收 k8s Service 和 Ingress.Backend.ServicePort 参数
+func (p *Parser) getServiceEndpoints(svc corev1.Service,
+   backendPort string) []Target {
+   var targets []Target
+   var endpoints []utils.Endpoint
+   var servicePort corev1.ServicePort
+   svcKey := svc.Namespace + &quot;/&quot; + svc.Name
+
+   for _, port := range svc.Spec.Ports {
+      // 查找 Ingress.Backend.ServicePort 和 Service.Port 对应的部分
+      // 获取 Port 资源对象
+      // targetPort could be a string, use the name or the port (int)
+      if strconv.Itoa(int(port.Port)) == backendPort ||
+         port.TargetPort.String() == backendPort ||
+         port.Name == backendPort {
+         servicePort = port
+         break
+      }
+   }
+
+   // Ingress with an ExternalName service and no port defined in the service.
+   if len(svc.Spec.Ports) == 0 &amp;&amp;
+      svc.Spec.Type == corev1.ServiceTypeExternalName {
+      // nolint: gosec
+      externalPort, err := strconv.Atoi(backendPort)
+      if err != nil {
+         glog.Warningf(&quot;only numeric ports are allowed in&quot;+
+            &quot; ExternalName services: %v is not valid as a TCP/UDP port&quot;,
+            backendPort)
+         return targets
+      }
+
+      servicePort = corev1.ServicePort{
+         Protocol:   &quot;TCP&quot;,
+         Port:       int32(externalPort),
+         TargetPort: intstr.FromString(backendPort),
+      }
+   }
+
+   // 获取 Endpoint
+   endpoints = getEndpoints(&amp;svc, &amp;servicePort,
+      corev1.ProtocolTCP, p.store.GetEndpointsForService)
+   if len(endpoints) == 0 {
+      glog.Warningf(&quot;service %v does not have any active endpoints&quot;,
+         svcKey)
+   }
+   for _, endpoint := range endpoints {
+      target := Target{
+         Target: kong.Target{
+            Target: kong.String(endpoint.Address + &quot;:&quot; + endpoint.Port),
+         },
+      }
+      targets = append(targets, target)
+   }
+   return targets
+}
+</code></pre>
+<p><code>p.store.GetEndpointsForService()</code> 方法是 Storer 获取 Endpoint 的方法，Endpoints 结构体：</p>
+<pre><code class=language-go>// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// Endpoints is a collection of endpoints that implement the actual service. Example:
+//   Name: &quot;mysvc&quot;,
+//   Subsets: [
+//     {
+//       Addresses: [{&quot;ip&quot;: &quot;10.10.1.1&quot;}, {&quot;ip&quot;: &quot;10.10.2.2&quot;}],
+//       Ports: [{&quot;name&quot;: &quot;a&quot;, &quot;port&quot;: 8675}, {&quot;name&quot;: &quot;b&quot;, &quot;port&quot;: 309}]
+//     },
+//     {
+//       Addresses: [{&quot;ip&quot;: &quot;10.10.3.3&quot;}],
+//       Ports: [{&quot;name&quot;: &quot;a&quot;, &quot;port&quot;: 93}, {&quot;name&quot;: &quot;b&quot;, &quot;port&quot;: 76}]
+//     },
+//  ]
+type Endpoints struct {
+   metav1.TypeMeta `json:&quot;,inline&quot;`
+   // Standard object's metadata.
+   // More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+   // +optional
+   metav1.ObjectMeta `json:&quot;metadata,omitempty&quot; protobuf:&quot;bytes,1,opt,name=metadata&quot;`
+
+   // The set of all endpoints is the union of all subsets. Addresses are placed into
+   // subsets according to the IPs they share. A single address with multiple ports,
+   // some of which are ready and some of which are not (because they come from
+   // different containers) will result in the address being displayed in different
+   // subsets for the different ports. No address will appear in both Addresses and
+   // NotReadyAddresses in the same subset.
+   // Sets of addresses and ports that comprise a service.
+   // +optional
+   Subsets []EndpointSubset `json:&quot;subsets,omitempty&quot; protobuf:&quot;bytes,2,rep,name=subsets&quot;`
+}
+</code></pre>
+<p>继续看获取 Endpoint 的方法：</p>
+<pre><code class=language-go>// getEndpoints returns a list of &lt;endpoint ip&gt;:&lt;port&gt; for a given service/target port combination.
+func getEndpoints(
+   s *corev1.Service,
+   port *corev1.ServicePort,
+   proto corev1.Protocol,
+   getEndpoints func(string, string) (*corev1.Endpoints, error),
+) []utils.Endpoint {
+
+   upsServers := []utils.Endpoint{}
+
+   if s == nil || port == nil {
+      return upsServers
+   }
+
+   // avoid duplicated upstream servers when the service
+   // contains multiple port definitions sharing the same
+   // targetport.
+   adus := make(map[string]bool)
+
+   // 外部服务
+   // ExternalName services
+   if s.Spec.Type == corev1.ServiceTypeExternalName {
+      glog.V(3).Infof(&quot;Ingress using a service %v of type=ExternalName&quot;, s.Name)
+
+      targetPort := port.TargetPort.IntValue()
+      // check for invalid port value
+      if targetPort &lt;= 0 {
+         glog.Errorf(&quot;ExternalName service with an invalid port: %v&quot;, targetPort)
+         return upsServers
+      }
+
+      return append(upsServers, utils.Endpoint{
+         Address: s.Spec.ExternalName,
+         Port:    fmt.Sprintf(&quot;%v&quot;, targetPort),
+      })
+   }
+    
+   // 解析 Service 的 ingress.kubernetes.io/service-upstream 注解
+   // 为 &quot;true&quot; 则交给 Kube-proxy 执行后续负载均衡操作
+   if annotations.HasServiceUpstreamAnnotation(s.Annotations) {
+      return append(upsServers, utils.Endpoint{
+         Address: s.Name + &quot;.&quot; + s.Namespace + &quot;.svc&quot;,
+         Port:    fmt.Sprintf(&quot;%v&quot;, port.Port),
+      })
+
+   }
+
+   glog.V(3).Infof(&quot;getting endpoints for service %v/%v and port %v&quot;, s.Namespace, s.Name, port.String())
+   // 调用 client-go Storer 获取 Service 的 Endpoints
+   ep, err := getEndpoints(s.Namespace, s.Name)
+   if err != nil {
+      glog.Warningf(&quot;unexpected error obtaining service endpoints: %v&quot;, err)
+      return upsServers
+   }
+
+   for _, ss := range ep.Subsets {
+      for _, epPort := range ss.Ports {
+
+         // 不是 TCP 协议的 pass
+         if !reflect.DeepEqual(epPort.Protocol, proto) {
+            continue
+         }
+
+         var targetPort int32
+
+         if port.Name == &quot;&quot; {
+            // port.Name is optional if there is only one port
+            targetPort = epPort.Port
+         } else if port.Name == epPort.Name {
+            targetPort = epPort.Port
+         }
+
+         // check for invalid port value
+         if targetPort &lt;= 0 {
+            continue
+         }
+
+         for _, epAddress := range ss.Addresses {
+            ep := fmt.Sprintf(&quot;%v:%v&quot;, epAddress.IP, targetPort)
+            // 如果有多个 Port 对应同一个 targetPort,
+            // 则跳过，不重复创建
+            if _, exists := adus[ep]; exists {
+               continue
+            }
+            ups := utils.Endpoint{
+               Address: epAddress.IP,
+               Port:    fmt.Sprintf(&quot;%v&quot;, targetPort),
+            }
+            upsServers = append(upsServers, ups)
+            adus[ep] = true
+         }
+      }
+   }
+
+   glog.V(3).Infof(&quot;endpoints found: %v&quot;, upsServers)
+   return upsServers
+}
+</code></pre>
+<h5 id=233-同步资源>2.3.3 同步资源</h5>
+<p><code>syncIngress()</code> 方法中在解析完资源，生成 Kong 需要的数据结构后，调用 <code>n.OnUpdate(state)</code> 方法 Diff、Sync 到 Kong。</p>
+<pre><code class=language-go>// 接收生成好的 Kong 数据库结构体，作为参数
+// OnUpdate is called periodically by syncQueue to keep the configuration in sync.
+// returning nil implies the synchronization finished correctly.
+// Returning an error means requeue the update.
+func (n *KongController) OnUpdate(state *parser.KongState) error {
+	// 调用 decK 库进行处理
+    targetContent := n.toDeckContent(state)
+
+	var customEntities []byte
+	var err error
+
+	var shaSum []byte
+	// disable optimization if reverse sync is enabled
+	if !n.cfg.EnableReverseSync {
+        // 生成 Hash 判断本次数据结构体和上次执行是否一致,
+        // 一致则不进行更新
+		shaSum, err = generateSHA(targetContent, customEntities)
+		if err != nil {
+			return err
+		}
+		if reflect.DeepEqual(n.runningConfigHash, shaSum) {
+			glog.Info(&quot;no configuration change, skipping sync to Kong&quot;)
+			return nil
+		}
+	}
+    
+    // 调用 DB 更新函数
+	err = n.onUpdateDBMode(targetContent)
+	if err != nil {
+		return err
+	}
+    // 记录本次操作的数据结构体 Hash
+	n.runningConfigHash = shaSum
+	glog.Info(&quot;successfully synced configuration to Kong&quot;)
+	return nil
+}
+</code></pre>
+<p>这里引入了 <a href=Kong/decK>Kong/decK</a> 库处理 Kong 配置的同步，该库使用 Go 编写，提供了针对 Kong 配置的管理能力，能够导出 Kong 数据库配置到文件，也能从文件导入到 Kong，提供 Diff 和 Sync 等方法，内部使用多协程，算法优化提升执行速度。能够单独通过 CLI 使用，这里调用该库的 Diff 和 Sync 方法同步配置到 Kong。</p>
+<p><code>n.toDeckContent(state)</code> 方法将 KongState 结构转换为 decK 库使用的数据结构（一个文件序列化结构体）。</p>
+<pre><code class=language-go>// Content represents a serialized Kong state.
+type Content struct {
+   FormatVersion string `json:&quot;_format_version,omitempty&quot; yaml:&quot;_format_version,omitempty&quot;`
+   Info          *Info  `json:&quot;_info,omitempty&quot; yaml:&quot;_info,omitempty&quot;`
+   Workspace     string `json:&quot;_workspace,omitempty&quot; yaml:&quot;_workspace,omitempty&quot;`
+
+   Services       []FService       `json:&quot;services,omitempty&quot; yaml:&quot;,omitempty&quot;`
+   Routes         []FRoute         `json:&quot;routes,omitempty&quot; yaml:&quot;,omitempty&quot;`
+   Consumers      []FConsumer      `json:&quot;consumers,omitempty&quot; yaml:&quot;,omitempty&quot;`
+   Plugins        []FPlugin        `json:&quot;plugins,omitempty&quot; yaml:&quot;,omitempty&quot;`
+   Upstreams      []FUpstream      `json:&quot;upstreams,omitempty&quot; yaml:&quot;,omitempty&quot;`
+   Certificates   []FCertificate   `json:&quot;certificates,omitempty&quot; yaml:&quot;,omitempty&quot;`
+   CACertificates []FCACertificate `json:&quot;ca_certificates,omitempty&quot; yaml:&quot;ca_certificates,omitempty&quot;`
+
+   PluginConfigs map[string]kong.Configuration `json:&quot;_plugin_configs,omitempty&quot; yaml:&quot;_plugin_configs,omitempty&quot;`
+}
+</code></pre>
+<p>继续关注调用 Diff、Sync 的方法：</p>
+<pre><code class=language-go>func (n *KongController) onUpdateDBMode(targetContent *file.Content) error {
+	client := n.cfg.Kong.Client
+
+    // 调用 Admin API 筛选 managed-by-conroller tag 下的
+    // 所有资源，到 State
+	// Get queries all the entities using client and returns
+	// all the entities in KongRawState.
+	rawState, err := dump.Get(client, dump.Config{
+		SelectorTags: n.getIngressControllerTags(),
+	})
+	if err != nil {
+		return errors.Wrap(err, &quot;loading configuration from kong&quot;)
+	}
+    // Get builds a KongState from a raw representation of Kong.
+	currentState, err := state.Get(rawState)
+	if err != nil {
+		return err
+	}
+
+	// Get process the fileContent and renders a RawState.
+	// IDs of entities are matches based on currentState.
+	rawState, err = file.Get(targetContent, file.RenderConfig{
+		CurrentState: currentState,
+		KongVersion:  n.cfg.Kong.Version,
+	})
+	if err != nil {
+		return err
+	}
+    // Get builds a KongState from a raw representation of Kong.
+	targetState, err := state.Get(rawState)
+	if err != nil {
+		return err
+	}
+
+    // Diff, Sync
+	syncer, err := diff.NewSyncer(currentState, targetState)
+	if err != nil {
+		return errors.Wrap(err, &quot;creating a new syncer&quot;)
+	}
+	syncer.SilenceWarnings = true
+	//client.SetDebugMode(true)
+	_, errs := solver.Solve(nil, syncer, client, n.cfg.Kong.Concurrency, false)
+	if errs != nil {
+		return deckutils.ErrArray{Errors: errs}
+	}
+	return nil
+}
+</code></pre>
+<p><code>dump.Get()</code> 方法调用 Admin API 获取 <code>managed-by-controller</code> tag 下所有的资源，加载到内存。</p>
+<p>该方法调用 decK 生成了 k8s 环境下的资源状态，和通过 Admin API 查询到的 Kong DB 里的资源状态，接下来会调用 decK 库进行 diff 和 sync，将创建 Kong DB 里没有的资源，删除 k8s 环境下没有的资源，同步更新 Kong 的资源。</p>
+<h3 id=25-ingress-nginx-分析>2.5 ingress-nginx 分析</h3>
+<p><code>ingress-nginx</code> 是 Kubernetes 的官方 Ingress Controller 项目，其 Controller 部署的启动逻辑与上文所述 Kong 的 Ingress Controller 基本一致，甚至后者部分代码是直接从 <code>ingress-nginx</code> Copy 过来的，代码里还残留着 <code>NGINX</code> 字样。</p>
+<h4 id=251-ssl-proxy-分析>2.5.1 SSL Proxy 分析</h4>
+<p><code>ingress-nginx</code> 提供了 SSL Passthrough 功能，使得加密流量直接通过 443 端口传到后端服务器，这里引用一篇文章清晰明了的解释。</p>
+<p>
+<figure class=image>
+<img src=/2021/11/kong-ingress-controller-%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/images/kubernetes-ingress-controller-and-ingresses-https.png alt=img{512x368} loading=lazy>
+<figcaption>img{512x368}</figcaption>
+</figure></p>
+<blockquote>
+<p>svc7: 是对传统通信模型的“复现”，即 Client 与 Nginx 间采用 HTTPS 加密通信，但 Nginx 与 svc7 间则是明文的 HTTP 通信；</p>
+<p>svc8: 是 ssl-termination 的安全配置模型，即 Client 与 svc8 的 HTTPS 通信分为“两段”，Client 与 Nginx 建立 HTTPS 连接后，Nginx 将 Client 提交的加密请求解密后，再向 svc8 发起 HTTPS 请求，并重新加密请求数据。这种 Client 端 SSL 的过程在反向代理或负载均衡器终结的 HTTPS 通信方式被称为“ssl-termination”。</p>
+<p>svc9: 是 ssl-passthrough 的安全配置模型，即 Nginx 不会对 Client 的 HTTPS Request 进行解密，而是直接转发给 backend 的 svc9 服务，Client 端的 SSL 过程不会终结于 Nginx，而是在 svc9 对应的 Pod 中终结。这种 HTTPS 通信方式被称为”ssl-passthrough”。这种配置模型尤其适合 backend service 对 Client 端进行 client certificate 验证的情况，同时也降低了 Nginx 加解密的性能负担。</p>
+</blockquote>
+<p>Ingress Controller 启动时如果有 <code>--enable-ssl-passthrough</code> 参数则内部 Go 程序占用 443 端口提供代理功能。</p>
+<pre><code class=language-go>	// Controller 中判断是否启用 ssl 透传
+	if n.cfg.EnableSSLPassthrough {
+		n.setupSSLProxy()
+	}
+
+func (n *NGINXController) setupSSLProxy() {
+	cfg := n.store.GetBackendConfiguration()
+	sslPort := n.cfg.ListenPorts.HTTPS
+	proxyPort := n.cfg.ListenPorts.SSLProxy
+
+	klog.InfoS(&quot;Starting TLS proxy for SSL Passthrough&quot;)
+	n.Proxy = &amp;TCPProxy{
+		Default: &amp;TCPServer{
+			Hostname:      &quot;localhost&quot;,
+			IP:            &quot;127.0.0.1&quot;,
+			Port:          proxyPort,
+			ProxyProtocol: true,
+		},
+	}
+
+    // sslPort 为 443 端口
+	listener, err := net.Listen(&quot;tcp&quot;, fmt.Sprintf(&quot;:%v&quot;, sslPort))
+	if err != nil {
+		klog.Fatalf(&quot;%v&quot;, err)
+	}
+
+	// accept TCP connections on the configured HTTPS port
+	go func() {
+		for {
+			var conn net.Conn
+			var err error
+
+			conn, err = listener.Accept()
+			if err != nil {
+				klog.Warningf(&quot;Error accepting TCP connection: %v&quot;, err)
+				continue
+			}
+
+			klog.V(3).InfoS(&quot;Handling TCP connection&quot;, &quot;remote&quot;, conn.RemoteAddr(), &quot;local&quot;, conn.LocalAddr())
+			go n.Proxy.Handle(conn)
+		}
+	}()
+}
+</code></pre>
+<p>Nginx 在被 Go 程序占用 443 端口后，会在 <code>proxyPort</code> 端口（默认 442）上监听 HTTPS 请求。</p>
+<p>生成 http 块下 server listen 的部分是这样的：</p>
+<pre><code class=language-go>func httpsListener(addresses []string, co string, tc config.TemplateConfig) []string {
+	out := make([]string, 0)
+	for _, address := range addresses {
+		lo := []string{&quot;listen&quot;}
+
+		if tc.IsSSLPassthroughEnabled {
+			if address == &quot;&quot; {
+				lo = append(lo, fmt.Sprintf(&quot;%v&quot;, tc.ListenPorts.SSLProxy))
+			} else {
+				lo = append(lo, fmt.Sprintf(&quot;%v:%v&quot;, address, tc.ListenPorts.SSLProxy))
+			}
+
+			if !strings.Contains(co, &quot;proxy_protocol&quot;) {
+				lo = append(lo, &quot;proxy_protocol&quot;)
+			}
+		} else {
+			if address == &quot;&quot; {
+				lo = append(lo, fmt.Sprintf(&quot;%v&quot;, tc.ListenPorts.HTTPS))
+			} else {
+				lo = append(lo, fmt.Sprintf(&quot;%v:%v&quot;, address, tc.ListenPorts.HTTPS))
+			}
+		}
+
+		lo = append(lo, co)
+		lo = append(lo, &quot;ssl&quot;)
+
+		if tc.Cfg.UseHTTP2 {
+			lo = append(lo, &quot;http2&quot;)
+		}
+
+		lo = append(lo, &quot;;&quot;)
+		out = append(out, strings.Join(lo, &quot; &quot;))
+	}
+
+	return out
+}
+</code></pre>
+<p>通过传参渲染 Go 模板，最终生成的 http 块中其中一个 server 的示例。</p>
+<p>启用 <code>ssl passthrough</code> 功能后，所有 443 流量经过 Go 程序处理，Nginx 上只监听 442 端口。</p>
+<pre><code class=language-tmpl>http {
+   ## start server svc.test.com
+	server {
+		server_name svc.test.com;
+		listen 80;
+		listen 442 proxy_protocol ssl http2;
+		
+		location / {
+			proxy_pass http://default-svc;
+		}
+	}
+	## end server
+}
+</code></pre>
+<p>内部的请求分发在 <code>balancer_by_lua_block</code> 块中调用 Lua 脚本处理，这里不做详细描述。</p>
+<p>Go 程序通过读取请求前 4k 字节，解析出 SNI 域名，查找后端服务器。</p>
+<pre><code class=language-go>/* This function is basically all most folks want to invoke out of this
+ * jumble of bits. This will take an incoming TLS Client Hello (including
+ * all the fuzzy bits at the beginning of it - fresh out of the socket) and
+ * go ahead and give us the SNI Name they want. */
+func GetHostname(data []byte) (string, error) {
+	if len(data) == 0 || data[0] != 0x16 {
+		return &quot;&quot;, fmt.Errorf(&quot;Doesn't look like a TLS Client Hello&quot;)
+	}
+
+	extensions, err := GetExtensionBlock(data)
+	if err != nil {
+		return &quot;&quot;, err
+	}
+	sn, err := GetSNBlock(extensions)
+	if err != nil {
+		return &quot;&quot;, err
+	}
+	sni, err := GetSNIBlock(sn)
+	if err != nil {
+		return &quot;&quot;, err
+	}
+	return string(sni), nil
+}
+</code></pre>
+<p>如果没有找到对应的后端服务器（没有开启 SSL 透传功能），则传递到默认的 Nginx 442 端口，交给 Nginx 去处理 HTTPS 请求。</p>
+<pre><code class=language-go>// Get returns the TCPServer to use for a given host.
+func (p *TCPProxy) Get(host string) *TCPServer {
+	if p.ServerList == nil {
+		return p.Default
+	}
+
+	for _, s := range p.ServerList {
+		if s.Hostname == host {
+			return s
+		}
+	}
+
+	return p.Default
+}
+</code></pre>
+<p>处理数据流：</p>
+<pre><code class=language-go>// Handle reads enough information from the connection to extract the hostname
+// and open a connection to the passthrough server.
+func (p *TCPProxy) Handle(conn net.Conn) {
+	defer conn.Close()
+	data := make([]byte, 4096)
+
+	length, err := conn.Read(data)
+	if err != nil {
+		klog.V(4).ErrorS(err, &quot;Error reading the first 4k of the connection&quot;)
+		return
+	}
+
+	proxy := p.Default
+	hostname, err := parser.GetHostname(data[:])
+	if err == nil {
+		klog.V(4).InfoS(&quot;TLS Client Hello&quot;, &quot;host&quot;, hostname)
+		proxy = p.Get(hostname)
+	}
+
+	if proxy == nil {
+		klog.V(4).InfoS(&quot;There is no configured proxy for SSL connections.&quot;)
+		return
+	}
+
+	hostPort := net.JoinHostPort(proxy.IP, fmt.Sprintf(&quot;%v&quot;, proxy.Port))
+	clientConn, err := net.Dial(&quot;tcp&quot;, hostPort)
+	if err != nil {
+		return
+	}
+	defer clientConn.Close()
+
+	if err != nil {
+		klog.ErrorS(err, &quot;Error writing Proxy Protocol header&quot;)
+		clientConn.Close()
+	} else {
+		_, err = clientConn.Write(data[:length])
+		if err != nil {
+			klog.Errorf(&quot;Error writing the first 4k of proxy data: %v&quot;, err)
+			clientConn.Close()
+		}
+	}
+
+	pipe(clientConn, conn)
+}
+
+func pipe(client, server net.Conn) {
+	doCopy := func(s, c net.Conn, cancel chan&lt;- bool) {
+		io.Copy(s, c)
+		cancel &lt;- true
+	}
+
+	cancel := make(chan bool, 2)
+
+	go doCopy(server, client, cancel)
+	go doCopy(client, server, cancel)
+
+	select {
+	case &lt;-cancel:
+		return
+	}
+}
+</code></pre>
+<p>官方文档中描述该功能会造成<strong>不可忽略的性能影响</strong>。</p>
+</div>
+<footer class=post-footer>
+<div class=post-meta>
+<time datetime=" 2021-11-06" itemprop=datePublished>Nov 6, 2021</time>
+</div>
+</footer>
+</article>
+<script src=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.min.js></script>
+<aside class=typeface-sans lang=zh-hans>
+<nav class=toc></nav>
+</aside>
+<script>tocbot.init({tocSelector:'.toc',contentSelector:'article',headingSelector:'h1, h2, h3, h4, h5',hasInnerContainers:!0,collapseDepth:"3",positionFixedSelector:".toc",headingsOffset:10})</script>
+</div><script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/prism.min.js></script>
+<script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/plugins/filter-highlight-all/prism-filter-highlight-all.min.js></script>
+<script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/plugins/autoloader/prism-autoloader.min.js></script>
+<script>Prism.plugins.filterHighlightAll.add(function(a){return a.language!=="mermaid"})</script>
+<script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js></script>
+<script>mermaid.init({startOnLoad:!0},"pre code.language-mermaid",function(){const a=document.querySelectorAll('code.language-mermaid');for(const c of a){c.style.backgroundColor='initial';const b=c.parentNode;b.style.border='none',b.style.textAlign='center',window.darkmode&&!window.darkmode.isActivated()&&(b.style.backgroundColor='initial')}})</script>
+</div>
+</main><footer class=site-footer>
+<div class=wrapper>
+<div class=social-links>
+<a class="social-link social-github" href=https://github.com/mayocream><svg style="width:24px;height:24px" viewBox="0 0 24 24"><path fill="currentcolor" d="M12 2A10 10 0 002 12c0 4.42 2.87 8.17 6.84 9.5C9.34 21.58 9.5 21.27 9.5 21 9.5 20.77 9.5 20.14 9.5 19.31 6.73 19.91 6.14 17.97 6.14 17.97c-.46-1.16-1.11-1.47-1.11-1.47C4.12 15.88 5.1 15.9 5.1 15.9 6.1 15.97 6.63 16.93 6.63 16.93 7.5 18.45 8.97 18 9.54 17.76 9.63 17.11 9.89 16.67 10.17 16.42c-2.22-.25-4.55-1.11-4.55-4.92.0-1.11.38-2 1.03-2.71C6.55 8.54 6.2 7.5 6.75 6.15c0 0 .84-.27 2.75 1.02C10.29 6.95 11.15 6.84 12 6.84s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02C17.8 7.5 17.45 8.54 17.35 8.79 18 9.5 18.38 10.39 18.38 11.5c0 3.82-2.34 4.66-4.57 4.91C14.17 16.72 14.5 17.33 14.5 18.26c0 1.34.0 2.42.0 2.74.0.27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/></svg>
+</a>
+<a class="social-link social-rss" href=/index.xml target=_blank><svg style="width:24px;height:24px" viewBox="0 0 24 24"><path fill="currentcolor" d="M6.18 15.64a2.18 2.18.0 012.18 2.18C8.36 19 7.38 20 6.18 20 5 20 4 19 4 17.82a2.18 2.18.0 012.18-2.18M4 4.44A15.56 15.56.0 0119.56 20H16.73A12.73 12.73.0 004 7.27V4.44M4 10.1A9.9 9.9.0 0113.9 20H11.07A7.07 7.07.0 004 12.93V10.1z"/></svg>
+</a>
+</div>
+<div class=credits>
+Theme KAGAMI by Kamikat
+</div>
+</div>
+</footer><script>(function(a){for(var a=Array.prototype.slice.call(document.getElementsByClassName('baseline-fix')),b=0,c;b!=a.length;b++)c=a[b],c.innerHTML=c.innerHTML.replace(/[\u2000-\u206e⸀-\u2e7e⺀-\u2efe⼀-\u2fde⿰-\u2ffe\u3000-〾\u3040-ゞ゠-ヾ\u3100-\u312e\u3130-ㆎ㆐-㆞ㆠ-\u31be㇀-\u31eeㇰ-ㇾ㈀-㋾㌀-㏾㐀-\u4dbe一-\u9ffe\ua960-\ua97e가-\ud7ae\ud7b0-\ud7fe豈-\ufafe︰-﹎\uff00-￮]|[\ud840-\ud868\ud86a-\ud86c][\udc00-\udfff]|\ud82c[\udc00-\udcfe]|\ud869[\udc00-\udede\udf00-\udfff]|\ud86d[\udc00-\udf3e\udf40-\udfff]|\ud86e[\udc00-\udc1e]|\ud87e[\udc00-\ude1e]/g,function(a){return'<span class="baseline-fix-block">'+a+'<'+'/span>'}),c.classList.remove('baseline-fix')})(Array.prototype.slice.call(document.getElementsByClassName('baseline-fix')))</script>
+<script type=text/javascript>const resize=function(){this.width=.5*(this.naturalWidth||this.width)};Array.prototype.forEach.call(document.querySelectorAll('.half-size, .retina2x'),function(a){a.naturalWidth?resize.call(a):a.onload=resize})</script>
+<script src=https://cdn.jsdelivr.net/npm/twemoji@13.1.0/dist/twemoji.min.js></script>
+<script>twemoji.parse(document.body,{folder:'svg',ext:'.svg'})</script>
+</body>
