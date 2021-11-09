@@ -15,7 +15,7 @@ date: "2021-09-21"
   ctx.fillText(year, 0, 32)
 </script>  
 
-Infrastructure Engineer.
+Gamer.
 
 Email: [mayo@shoujo.io](mailto:mayo@shoujo.io)
 
