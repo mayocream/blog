@@ -10,13 +10,10 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1706622323" media=all>
+<link rel=stylesheet href="/bundle.css?v=1706646854" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://github.com/mayocream.png><meta name=generator content="Hugo 0.88.1">
-<link rel=canonical href=https://mayo.rocks/2021/11/kong-ingress-controller-%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/>
-<script type=application/javascript>var doNotTrack=!1;doNotTrack||(window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)},ga.l=+new Date,ga('create','G-JKVXF5HSKT','auto'),ga('send','pageview'))</script>
-<script async src=https://www.google-analytics.com/analytics.js></script>
-<meta property="og:title" content="Kong ingress controller 源码阅读">
+<link rel=canonical href=https://mayo.rocks/2021/11/kong-ingress-controller-%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/><meta property="og:title" content="Kong ingress controller 源码阅读">
 <meta property="og:description" content="该程序启动后有以下主要步骤： 从命令行和环境变量解析入参 (# flags.go) 尝试与 Kubernetes API Server 建立连接 (# func createApiserverClient) 与 Kong Admin API 通信 (# func kong.NewClient) 创建监听资源变化的 Informer 创建资源锁竞争选举">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://mayo.rocks/2021/11/kong-ingress-controller-%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/"><meta property="article:section" content="posts">
