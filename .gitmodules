@@ -1,9 +1,9 @@
 [submodule "content/posts"]
 	path = content/posts
-	url = git@github.com:mayocream/Articles.git
+	url = https://github.com/mayocream/Articles.git
 [submodule "themes/axiom"]
 	path = themes/axiom
-	url = git@github.com:mayocream/axiom.git
+	url = https://github.com/mayocream/axiom.git
 [submodule "themes/kagami"]
 	path = themes/kagami
-	url = git@github.com:mayocream/hugo-theme-kagami.git
+	url = https://github.com/mayocream/hugo-theme-kagami.git
