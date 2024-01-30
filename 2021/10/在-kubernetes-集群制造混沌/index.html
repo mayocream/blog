@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1668850391" media=all>
+<link rel=stylesheet href="/bundle.css?v=1706621693" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://github.com/mayocream.png><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://mayo.rocks/2021/10/%E5%9C%A8-kubernetes-%E9%9B%86%E7%BE%A4%E5%88%B6%E9%80%A0%E6%B7%B7%E6%B2%8C/>
@@ -95,7 +95,7 @@ func EnsureFuseDev() {
 	}
 }
 </code></pre>
-<p>同时在 <a href=https://github.com/chaos-mesh/chaos-mesh/pull/1453>#1103</a> PR 中，Chaos Daemon 默认启用特权模式，即容器的 <code>securityContext</code> 中设置 <code>privileged: true</code>。</p>
+<p>同时在 <a href=https://github.com/chaos-mesh/chaos-mesh/pull/1453>#1453</a> PR 中，Chaos Daemon 默认启用特权模式，即容器的 <code>securityContext</code> 中设置 <code>privileged: true</code>。</p>
 <h3 id=杀死-pod>杀死 Pod</h3>
 <p>PodKill、PodFailure、ContainerKill 都归属于 PodChaos 类别下，PodKill 是随机杀死 Pod。</p>
 <p>PodKill 的具体实现其实是通过调用 API Server 发送 Kill 命令。</p>
