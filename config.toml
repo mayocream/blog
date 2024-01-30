@@ -5,10 +5,10 @@ theme = "kagami"
 
 languageCode = "zh-Hans"
 
-paginate = 10
+paginate = 100
 enableEmoji = true
 
-googleAnalytics = "G-JKVXF5HSKT"
+# googleAnalytics = "G-JKVXF5HSKT"
 
 [permalinks]
 posts = "/:year/:month/:slug"
