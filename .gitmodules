@@ -1,6 +1,3 @@
-[submodule "content/posts"]
-	path = content/posts
-	url = https://github.com/mayocream/Articles.git
 [submodule "themes/axiom"]
 	path = themes/axiom
 	url = https://github.com/mayocream/axiom.git

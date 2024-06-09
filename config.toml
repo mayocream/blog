@@ -3,12 +3,10 @@ hasCJKLanguage = true
 title = "Mayo's Blog"
 theme = "kagami"
 
-languageCode = "zh-Hans"
+languageCode = "ja"
 
 paginate = 100
 enableEmoji = true
-
-# googleAnalytics = "G-JKVXF5HSKT"
 
 [permalinks]
 posts = "/:year/:month/:slug"
