@@ -1,0 +1,1791 @@
+<!doctype html><html lang=ja><head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>APISIX 源码分析 - Mayo's Blog</title>
+<meta name=description content="本文基于 APISIX 2.6 版本进行源码分析，源码阅读注释仓库: review，分析主要流程以及核心机制。 在源码阅读过程中学习了涉及 OpenResty 的部分内容，包含 lua-">
+<meta name=author content>
+<link rel=preconnect href=https://cdn.jsdelivr.net>
+<link rel=preconnect href=https://fonts.googleapis.com>
+<link rel=preconnect href=https://fonts.gstatic.com crossorigin>
+<link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
+<link rel=stylesheet href="/bundle.css?v=1717977410" media=all>
+<link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
+<link rel=icon href=https://github.com/mayocream.png><meta name=generator content="Hugo 0.88.1">
+<link rel=canonical href=https://mayo.rocks/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/><meta property="og:title" content="APISIX 源码分析">
+<meta property="og:description" content="本文基于 APISIX 2.6 版本进行源码分析，源码阅读注释仓库: review，分析主要流程以及核心机制。 在源码阅读过程中学习了涉及 OpenResty 的部分内容，包含 lua-">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://mayo.rocks/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/"><meta property="article:section" content="posts">
+<meta property="article:published_time" content="2021-09-27T00:00:00+00:00">
+<meta property="article:modified_time" content="2021-09-27T00:00:00+00:00"><meta property="og:site_name" content="Mayo's Blog">
+</head>
+</html>
+<body><script src=https://cdn.jsdelivr.net/npm/darkmode-js@1.5.7/lib/darkmode-js.min.js></script>
+<script>const opts={bottom:'32px',right:'unset',left:'32px',time:'0.3s',mixColor:'#fff',backgroundColor:'#fff',buttonColorDark:'#100f2c',buttonColorLight:'#fff',saveInCookies:!0,label:'🌓',autoMatchOsTheme:!0};let darkmode;window.matchMedia('only screen and (min-width: 680px)').matches?(darkmode=new Darkmode(opts),darkmode.showWidget()):(localStorage.removeItem('darkmode'),darkmode=new Darkmode(opts)),window.darkmode=darkmode,document.addEventListener('DOMContentLoaded',function(){document.body.style.opacity=1})</script>
+<main class=page-content aria-label=Content>
+<div class=wrapper><nav class=site-nav>
+<a class=page-link href=/posts/>Posts</a>
+<a class=page-link href=/about/>About</a>
+</nav><header class=post-header>
+<a class=site-title href=https://mayo.rocks>Mayo's Blog</a>
+<h1 class="post-title baseline-fix typeface-sans" lang=ja itemprop="name headline">APISIX 源码分析</h1>
+</header>
+<div class=post-cover aria-label=Cover>
+<div class=post-cover-wrapper>
+<img src alt>
+</div>
+<div class=cover-meta></div>
+</div>
+<div class=post-layout>
+<article class="post typeface-sans" lang=ja itemscope itemtype=http://schema.org/BlogPosting>
+<div class=post-content itemprop=articleBody>
+<p>本文基于 <a href=https://github.com/apache/apisix>APISIX</a> 2.6 版本进行源码分析，源码阅读注释仓库: <a href=https://github.com/mayocream/apisix/tree/review>review</a>，分析主要流程以及核心机制。</p>
+<p>在源码阅读过程中学习了涉及 OpenResty 的部分内容，包含 lua-resty-core（OpenResty 核心），以及 OpenResty 作者开源的 <code>lua-resty-*</code> 包，同时了解了 OpenResty 的测试框架 Test::Nginx。在源码阅读过程中给 APISIX 提了 2 个 PR（Code Style 以及 Build Script），知道了基本的 LuaJIT FFI 用法，该部分还在学习中。</p>
+<p>同时基于源码阅读，对公司网关选型进行了分析。</p>
+<h2 id=1-apisix-概述>1. APISIX 概述</h2>
+<h3 id=11-项目概述>1.1. 项目概述</h3>
+<p>既然 APISIX 是基于 OpenResty 开发的 API 网关，APISIX 与 OpenResty 的请求生命周期一致，APISIX 利用 Lua Nginx Module 提供的 <code>*_by_lua</code> 添加 Hook。</p>
+<p>
+<figure class=image>
+<img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/gateway-traffic.png alt="API Gateway traffic" loading=lazy>
+<figcaption>API Gateway traffic</figcaption>
+</figure></p>
+<p>它抽象了与 Kong 网关同样的数据模型，具有同样的 Route、Service、Upstream、Plugin、Consumer 等资源。</p>
+<div style=display:flex>
+<figure style=max-width:50%>
+<img src=images/114740649-a9bf2200-9d67-11eb-8e1d-1409fb5c18c2.png>
+<figcaption style=text-align:center>APISIX</figcaption>
+</figure>
+<figure style=max-width:50%>
+<img src=images/Kong-GS-overview.png>
+<figcaption style=text-align:center>Kong</figcaption>
+</figure>
+</div>
+基本上可以看作 APISIX 是 Kong 网关的重构——运用大量 LuaJIT、OpenResty 技巧优化性能、简化复杂的数据结构、替换储存引擎为 etcd。
+<pre><code class=language-mermaid>graph LR
+	A(Routes)
+	B(Services) --&gt; |Many| A
+	C(Upstreams)
+	A --&gt; |One| C
+	B --&gt; |One| C
+	D(Plugin)
+	A --&gt; |Many| D
+	B --&gt; |Many| D
+	E(Consumers) --&gt; |Many| D
+	
+</code></pre>
+<p>比较有意思的是我翻到 APISIX 的一个 issue 中，项目开发者说不确定是什么原因，我们看看同行怎么做的吧。</p>
+<blockquote>
+<p>&ldquo;How does Kong solve similar problems?"<sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup></p>
+</blockquote>
+<h3 id=12-生态概述>1.2. 生态概述</h3>
+<p>Kong 网关开源生态有的，APISIX 基本都有或者正在做。包含：K8s Ingress Controller、Mesh、Dashboard。</p>
+<p>插件方面比 Kong 开源版本多了 Skywalking、Traffit 拆分、Mirror 流量功能。</p>
+<h2 id=2-apisix-源码分析>2. APISIX 源码分析</h2>
+<h3 id=21-基本流程>2.1. 基本流程</h3>
+<h4 id=211-目录结构>2.1.1. 目录结构</h4>
+<pre><code class=language-bash>$ tree -L 2
+.
+├── apisix
+│   ├── admin # Admin API
+│   ├── api_router.lua
+│   ├── balancer # 负载均衡器
+│   ├── balancer.lua
+│   ├── cli # CLI, Lua 脚本
+│   ├── constants.lua # 常量
+│   ├── consumer.lua
+│   ├── control
+│   ├── core # 主要是封装的公共方法
+│   ├── core.lua
+│   ├── debug.lua
+│   ├── discovery # 服务发现, 支持 consul, eruka, dns
+│   ├── http
+│   ├── init.lua # _by_lua 函数入口
+│   ├── patch.lua
+│   ├── plugin_config.lua
+│   ├── plugin.lua # 插件
+│   ├── plugins
+│   ├── router.lua # Router
+│   ├── schema_def.lua # jsonschema 定义
+│   ├── script.lua
+│   ├── ssl
+│   ├── ssl.lua
+│   ├── stream
+│   ├── timers.lua # timer 封装
+│   ├── upstream.lua
+│   └── utils
+├── bin
+│   └── apisix # apisix CLI, shell 脚本
+├── ci # CI 脚本
+├── conf # 默认配置文件
+├── deps
+├── docs
+├── Makefile # 快捷指令
+├── rockspec # luarocks 包管理
+├── t # Test::Nginx 测试
+└── utils # Shell 脚本
+</code></pre>
+<h4 id=212-启动流程>2.1.2. 启动流程</h4>
+<pre><code class=language-mermaid>graph LR
+	1[CLI 执行] --&gt; 2[&quot;运行 LUA 脚本 (LuaJIT)&quot;]
+	3[生成 Nginx 配置] --&gt; 4[初始化 etcd]
+	2 --&gt; 3
+	4 --&gt; 5[启动 OpenResty]
+</code></pre>
+<p>CLI 默认会用 LuaJIT 启动，若版本不够便退回到 Lua 5.1 解释器执行。</p>
+<pre><code class=language-bash># 查找 APISIX LUA 包路径
+# shell -s 判断文件是否存在且 size &gt; 0
+# ref: https://stackoverflow.com/questions/53319817/what-is-the-meaning-of-n-z-x-l-d-etc-in-shell-script
+if [ -s './apisix/cli/apisix.lua' ]; then
+	...
+fi
+
+# shell -e 判断文件是否存在
+if [[ -e $OR_EXEC &amp;&amp; &quot;$OR_VER&quot; =~ &quot;1.19&quot; ]]; then
+    # use the luajit of openresty
+    echo &quot;$LUAJIT_BIN $APISIX_LUA $*&quot;
+    exec $LUAJIT_BIN $APISIX_LUA $*
+elif [[ &quot;$LUA_VERSION&quot; =~ &quot;Lua 5.1&quot; ]]; then
+    # OpenResty version is not 1.19, use Lua 5.1 by default
+    # shell &amp;* 传递所有 args
+    # ref: https://stackoverflow.com/questions/4824590/propagate-all-arguments-in-a-bash-shell-script
+    echo &quot;lua $APISIX_LUA $*&quot;
+    exec lua $APISIX_LUA $*
+fi
+</code></pre>
+<p>启动过程中：</p>
+<ul>
+<li>调用 <code>popen</code> 执行 CMD 命令；</li>
+<li>使用 <a href=https://github.com/diegonehab/luasocket>luasocket</a> 库发起 HTTP 请求（非 OpenResty 运行时）；</li>
+<li>使用 ltn12 <a href=http://lua-users.org/wiki/FiltersSourcesAndSinks>sink</a> 进行流处理；</li>
+<li>创建 etcd prefix，value 为 <code>init</code>；</li>
+</ul>
+<h3 id=22-apisix-core>2.2. APISIX Core</h3>
+<p>APISIX 的核心部分，也就是项目开发者说 “极简核⼼代码量，不到 4000 ⾏，去除空行、注释行数甚至不到 3000 行” 的部分。</p>
+<p>主要封装了一些库和函数。</p>
+<h4 id=221-基本类型操作>2.2.1. 基本类型操作</h4>
+<p>基本上为了追求极致性能，能用 FFI 调用实现的都用了。</p>
+<h5 id=2211-字符串>2.2.1.1. 字符串</h5>
+<p>使用 FFI 调用 libc 函数 <code>memcmp</code> 进行字符串比较内存地址的前 n 长度是否相同。</p>
+<pre><code class=language-lua>local ffi         = require(&quot;ffi&quot;)
+local C           = ffi.C
+
+-- ref: https://www.cplusplus.com/reference/cstring/memcmp/
+-- ref: https://www.tutorialspoint.com/c_standard_library/c_function_memcmp.htm
+ffi.cdef[[
+    int memcmp(const void *s1, const void *s2, size_t n);
+]]
+</code></pre>
+<p>接收类型是 <code>const void *</code>，不可变类型可以直接传入 Lua string 类型。</p>
+<blockquote>
+<p>如果你的 C 函数接受 <code>const char *</code> 或者等价的 <code>const unsigned char/int8_t/... *</code> 这样的参数类型，
+可以直接传递 Lua string 进去，而无需另外准备一个 <code>ffi.new</code> 申请的数组。<sup id=fnref:2><a href=#fn:2 class=footnote-ref role=doc-noteref>2</a></sup></p>
+</blockquote>
+<p>string 前缀比较，比较 s, prefix 内存地址的前 n (#prefix) 长度是否相同。</p>
+<pre><code class=language-lua>-- 用 ffi 扩展 string 方法
+function _M.has_prefix(s, prefix)
+    if type(s) ~= &quot;string&quot; or type(prefix) ~= &quot;string&quot; then
+        error(&quot;unexpected type: s:&quot; .. type(s) .. &quot;, prefix:&quot; .. type(prefix))
+    end
+    if #s &lt; #prefix then
+        return false
+    end
+    -- 比较 s, prefix 内存地址的前 n (#prefix) 长度是否相同
+    local rc = C.memcmp(s, prefix, #prefix)
+    return rc == 0
+end
+</code></pre>
+<p>同理比较后缀：</p>
+<pre><code class=language-lua>C.memcmp(ffi_cast(&quot;char *&quot;, s) + #s - #suffix, suffix, #suffix)
+</code></pre>
+<h5 id=2212-table>2.2.1.2. Table</h5>
+<p>Table 是 Lua 中最常用的类型了，与其他语言比较的话相当于 PHP 的 Array 一样实用。</p>
+<p>Lua Table 需要注意的地方其一：</p>
+<blockquote>
+<p>table.new(narray, nhash)</p>
+<p>这个函数，会预先分配好指定的数组和哈希的空间大小，而不是在插入元素时自增长，这也是它的两个参数 narray 和 nhash 的含义。
+如果不使用这个函数，自增长是一个代价比较高的操作，会涉及到空间分配、resize 和 rehash 等，我们应该尽量避免。</p>
+<p>table.new 的文档并没有出现在 LuaJIT 的官网，而是深藏在 GitHub 项目的 <a href=https://github.com/openresty/luajit2/blob/v2.1-agentzh/doc/extensions.html>扩展文档</a> 里，用谷歌也很难找到，所以很多人并不知道这个函数的存在。</p>
+<p>超出预设的空间大小，也可以正常使用，只不过性能会退化，也就失去了使用 table.new 的意义。</p>
+<p>需要根据实际场景，来预设好 table.new 中数组和哈希空间的大小，这样才能在性能和内存占用上找到一个平衡点。<sup id=fnref:3><a href=#fn:3 class=footnote-ref role=doc-noteref>3</a></sup></p>
+</blockquote>
+<p>Lua Table 需要注意的地方其二：</p>
+<blockquote>
+<p>table.insert 虽然是一个很常见的操作，但性能并不乐观。
+如果不是根据指定下标来插入元素，那么每次都需要调用 LuaJIT 的 lj_tab_len 来获取数组的长度，以便插入队尾。获取 table 长度的时间复杂度为 O(n) 。</p>
+</blockquote>
+<p>参考 APISIX 作者给 <a href=https://github.com/kubernetes/ingress-nginx>ingress-nginx</a> 项目提的 Table 操作优化 PR：<a href=https://github.com/kubernetes/ingress-nginx/pull/3673>used table functions of LuaJIT for better performance.</a></p>
+<p>OpenResty Fork 的 LuaJIT 新增的 table 函数<sup id=fnref:4><a href=#fn:4 class=footnote-ref role=doc-noteref>4</a></sup>：</p>
+<ul>
+<li>table.isempty</li>
+<li>table.isarray</li>
+<li>table.nkeys</li>
+<li>table.clone</li>
+</ul>
+<p>回到 APISIX 封装的 Table 操作符：</p>
+<pre><code class=language-lua>-- 自行构建 index 插入 table, 比 table.insert 效率高
+function _M.insert_tail(tab, ...)
+    local idx = #tab
+    -- 遍历输入的参数
+    for i = 1, select('#', ...) do
+        idx = idx + 1
+        tab[idx] = select(i, ...)
+    end
+
+    return idx
+end
+</code></pre>
+<p><code>select('#', ...)</code> 获取输入参数的数量，<code>select(i, ...)</code> 获取第 n 个参数，Table 的遍历中大量使用该结构。</p>
+<p><code>try_read_attr</code> 实现了 <code>path.node.x</code> 的 table 访问方式，便于读取多层级配置项。</p>
+<pre><code class=language-lua>function _M.try_read_attr(tab, ...)
+    for i = 1, select('#', ...) do
+        local attr = select(i, ...)
+        if type(tab) ~= &quot;table&quot; then
+            return nil
+        end
+
+        tab = tab[attr]
+    end
+
+    return tab
+end
+</code></pre>
+<p>使用示例：</p>
+<pre><code class=language-lua>    local size = core_tab.try_read_attr(local_conf, &quot;graphql&quot;, &quot;max_size&quot;)
+    if size then
+        max_size = size
+    end
+</code></pre>
+<h4 id=222-工具类>2.2.2. 工具类</h4>
+<h5 id=2221-json-操作>2.2.2.1. JSON 操作</h5>
+<pre><code class=language-lua>local delay_tab = setmetatable({data = &quot;&quot;, force = false}, {
+    __tostring = function(self)
+        local res, err = encode(self.data, self.force)
+        if not res then
+            ngx.log(ngx.WARN, &quot;failed to encode: &quot;, err,
+                    &quot; force: &quot;, self.force)
+        end
+
+        return res
+    end
+})
+
+
+-- this is a non-thread safe implementation
+-- it works well with log, eg: log.info(..., json.delay_encode({...}))
+function _M.delay_encode(data, force)
+    delay_tab.data = data
+    delay_tab.force = force
+    return delay_tab
+end
+</code></pre>
+<p>设置了元表的 <code>__tostring</code> 方法，在字符串转换时才使用匿名函数调用 <code>json.encode</code>，在日志打印时，被忽略的日志会不执行 JSON 压缩，避免额外的性能损耗。</p>
+<h5 id=2222-lru-缓存>2.2.2.2. LRU 缓存</h5>
+<p><a href=https://github.com/openresty/lua-resty-lrucache>lua-resty-lrucache</a> 在写入时会清理 TTL 过期的缓存，读时如果数据过期了，会作为第二个参数返回：</p>
+<pre><code class=language-lua>function _M.get(self, key)
+    local hasht = self.hasht
+    local val = hasht[key]
+    if val == nil then
+        return nil
+    end
+
+    local node = self.key2node[key]
+
+    -- print(key, &quot;: moving node &quot;, tostring(node), &quot; to cache queue head&quot;)
+    local cache_queue = self.cache_queue
+    queue_remove(node)
+    queue_insert_head(cache_queue, node)
+
+    if node.expire &gt;= 0 and node.expire &lt; ngx_now() then
+        -- print(&quot;expired: &quot;, node.expire, &quot; &gt; &quot;, ngx_now())
+        return nil, val, node.user_flags
+    end
+
+    return val, nil, node.user_flags
+end
+</code></pre>
+<pre><code class=language-mermaid>graph TD
+	1[获取 LRU 缓存]
+	11{缓存失效?}
+	1 --&gt; 11
+	11 --&gt; 99
+	2{开启并发锁?}
+	3{不支持锁?}
+	3 --&gt; |是| 6
+	11 --&gt; |是| 2
+	2 --&gt; |是| 3
+	2 --&gt; |否| 6
+	3 --&gt; |否| 4
+	4[共享内存锁] --&gt; 5[再次获取缓存]
+	5 --&gt; 7
+	6[创建缓存]
+	7{缓存有效?} --&gt; 99
+	7 --&gt; |否| 6
+	6 --&gt; 99
+	99[返回缓存]
+</code></pre>
+<pre><code class=language-lua>local function fetch_valid_cache(lru_obj, invalid_stale, item_ttl,
+                                 item_release, key, version)
+    local obj, stale_obj = lru_obj:get(key)
+    if obj and obj.ver == version then
+        return obj
+    end
+
+    -- 如果 TTL 到期的数据版本号仍一致, 重新 set 该缓存
+    if not invalid_stale and stale_obj and stale_obj.ver == version then
+        lru_obj:set(key, stale_obj, item_ttl)
+        return stale_obj
+    end
+
+    -- release 回调
+    if item_release and obj then
+        item_release(obj.val)
+    end
+
+    return nil
+end
+
+
+-- 返回创建 LRU 的匿名函数
+local function new_lru_fun(opts)
+    local item_count, item_ttl
+    if opts and opts.type == 'plugin' then
+        item_count = opts.count or PLUGIN_ITEMS_COUNT
+        item_ttl = opts.ttl or PLUGIN_TTL
+    else
+        item_count = opts and opts.count or GLOBAL_ITEMS_COUNT
+        item_ttl = opts and opts.ttl or GLOBAL_TTL
+    end
+
+    local item_release = opts and opts.release
+    local invalid_stale = opts and opts.invalid_stale
+    -- 是否使用并发锁
+    local serial_creating = opts and opts.serial_creating
+    -- 参数为 LRU size
+    local lru_obj = lru_new(item_count)
+
+    return function (key, version, create_obj_fun, ...)
+        -- 不支持的 yielding 的 Nginx phase 无法使用 resty.lock
+        if not serial_creating or not can_yield_phases[get_phase()] then
+            local cache_obj = fetch_valid_cache(lru_obj, invalid_stale,
+                                item_ttl, item_release, key, version)
+            if cache_obj then
+                return cache_obj.val
+            end
+
+            local obj, err = create_obj_fun(...)
+            if obj ~= nil then
+                lru_obj:set(key, {val = obj, ver = version}, item_ttl)
+            end
+
+            return obj, err
+        end
+
+        local cache_obj = fetch_valid_cache(lru_obj, invalid_stale, item_ttl,
+                            item_release, key, version)
+        if cache_obj then
+            return cache_obj.val
+        end
+
+        -- 当缓存失效时获取锁
+        -- 创建共享内存 lock
+        local lock, err = resty_lock:new(lock_shdict_name)
+        if not lock then
+            return nil, &quot;failed to create lock: &quot; .. err
+        end
+
+        local key_s = tostring(key)
+        log.info(&quot;try to lock with key &quot;, key_s)
+
+        -- 获取 lock
+        local elapsed, err = lock:lock(key_s)
+        if not elapsed then
+            return nil, &quot;failed to acquire the lock: &quot; .. err
+        end
+
+        -- 再次获取缓存
+        cache_obj = fetch_valid_cache(lru_obj, invalid_stale, item_ttl,
+                        nil, key, version)
+        if cache_obj then
+            lock:unlock()
+            log.info(&quot;unlock with key &quot;, key_s)
+            return cache_obj.val
+        end
+
+        local obj, err = create_obj_fun(...)
+        if obj ~= nil then
+            lru_obj:set(key, {val = obj, ver = version}, item_ttl)
+        end
+        lock:unlock()
+        log.info(&quot;unlock with key &quot;, key_s)
+
+        return obj, err
+    end
+end
+</code></pre>
+<p>这段代码关联到两个 PR:</p>
+<ol>
+<li><a href=https://github.com/apache/apisix/pull/1486>bugfix(lrucache): when creating cached objects, use resty-lock to avoid repeated creation.</a></li>
+<li><a href=https://github.com/apache/apisix/pull/2575>change: make lrucache lock optional</a></li>
+</ol>
+<p>使用 <a href=https://github.com/openresty/lua-resty-lock>lua-resty-lock</a> 通过共享内存竞争锁，用在缓存中避免缓存击穿，当该 Lib 出于 Luajit 限制，无法在 <code>init_by_lua</code>, <code>init_worker_by_lua</code>, <code>header_filter_by_lua</code>, <code>body_filter_by_lua</code>, <code>balancer_by_lua</code>, <code>log_by_lua </code> 阶段中使用。</p>
+<p>引入的 <code>serial_creating</code> 属性用于判断插件是否需要启用锁。</p>
+<blockquote>
+<p>Kong 使用的 <a href=https://github.com/thibaultcha/lua-resty-mlcache>lua-resty-mlcache</a> 库内部也使用 resty.lock 防止缓存击穿（可选）。</p>
+</blockquote>
+<h5 id=2223-后台任务>2.2.2.3. 后台任务</h5>
+<p>两个地方默认初始化了定时器（Nginx Timer）执行后台任务。</p>
+<ol>
+<li><code>init_by_lua</code> 阶段创建 OpenResty 特权进程，负责执行特定的后台任务，不会干扰其他 Worker 进程，权限相当于 root；</li>
+<li><code>init_by_worker</code> 阶段创建 Background Timer，执行并发执行后台任务。</li>
+</ol>
+<p>OpenResty 特权进程不能处理请求，只能由 Timer 触发，逻辑上编写 <code>if type(ngx.process.type()) == "privileged agent"</code> 只在特权进程中执行操作。<sup id=fnref:5><a href=#fn:5 class=footnote-ref role=doc-noteref>5</a></sup></p>
+<blockquote>
+<p>Enables the privileged agent process in Nginx.</p>
+<p>The privileged agent process does not listen on any virtual server ports like those worker processes. And it uses the same system account as the nginx master process, which is usually a privileged account like <code>root</code>.</p>
+<p>The <code>init_worker_by_lua*</code> directive handler still runs in the privileged agent process. And one can use the <a href=https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/process.md#type>type</a> function provided by this module to check if the current process is a privileged agent.<sup id=fnref:6><a href=#fn:6 class=footnote-ref role=doc-noteref>6</a></sup></p>
+</blockquote>
+<pre><code class=language-lua>-- worker 默认后台运行的 timer, 执行各种后台任务 
+local function background_timer()
+    if core.table.nkeys(timers) == 0 then
+        return
+    end
+
+    local threads = {}
+    for name, timer in pairs(timers) do
+        core.log.info(&quot;run timer[&quot;, name, &quot;]&quot;)
+
+        -- 开启协程执行
+        local th, err = thread_spawn(timer)
+        if not th then
+            core.log.error(&quot;failed to spawn thread for timer [&quot;, name, &quot;]: &quot;, err)
+            goto continue
+        end
+
+        core.table.insert(threads, th)
+
+::continue::
+    end
+
+    local ok, err = thread_wait(unpack(threads))
+    if not ok then
+        core.log.error(&quot;failed to wait threads: &quot;, err)
+    end
+end
+
+function _M.init_worker()
+    local opts = {
+        each_ttl = 0,
+        sleep_succ = 0,
+        check_interval = check_interval, -- 默认间隔为 1 秒
+    }
+    local timer, err = core.timer.new(&quot;background&quot;, background_timer, opts)
+    if not timer then
+        core.log.error(&quot;failed to create background timer: &quot;, err)
+        return
+    end
+
+    core.log.notice(&quot;succeed to create background timer&quot;)
+end
+</code></pre>
+<p>APISIX 引入特权进程的一个目的在于实现 Log Rotate 插件功能。</p>
+<h4 id=223-请求生命周期>2.2.3. 请求生命周期</h4>
+<h5 id=2231-ctx>2.2.3.1. ctx</h5>
+<blockquote>
+<p>Use <code>ngx.ctx</code> wherever you can. <code>ngx.var</code> is much more expensive and is also limited to string values. The latter should only be used to exchange data with other nginx C modules.<sup id=fnref:7><a href=#fn:7 class=footnote-ref role=doc-noteref>7</a></sup></p>
+</blockquote>
+<p>APISIX 中使用缓存 <code>ngx.var</code> 获取的结果， 在不同生命周期中传递。使用 <a href=https://github.com/api7/lua-var-nginx-module>lua-var-nginx-module</a> Nginx C 模块和 FFI 获取变量，在没有开启 Nginx C 模块的情况下回退到 <code>ngx.var</code> 方式获取。APISIX 默认没有在构建脚本中加载 C 模块，提交的 PR <a href=https://github.com/api7/apisix-build-tools/pull/44>feat: add lua-var-nginx-module</a> 在编译 OpenResty 时添加了该模块。</p>
+<pre><code class=language-lua>function _M.set_vars_meta(ctx)
+    -- 从 table 池中获取/创建一个 hash 长度为 32 的 table
+    local var = tablepool.fetch(&quot;ctx_var&quot;, 0, 32)
+    if not var._cache then
+        var._cache = {}
+    end
+
+    -- 通过 resty.core.base 获取原始 request C 指针 (?)
+    -- ref: https://github.com/openresty/lua-resty-core/blob/master/lib/resty/core/base.lua
+    var._request = get_request()
+    -- 绑定元表
+    setmetatable(var, mt)
+    -- 缓存到 ngx ctx 中
+    ctx.var = var
+end
+</code></pre>
+<p>使用 <a href=https://github.com/openresty/lua-tablepool>tablepool</a> 从 Lua table 池中获取 table，避免频繁分配内存。</p>
+<pre><code class=language-lua>do
+    -- 获取特殊 var 类型的方法
+    local var_methods = {
+        method = ngx.req.get_method,
+        -- ref: https://github.com/cloudflare/lua-resty-cookie
+        cookie = function () return ck:new() end
+    }
+
+    local ngx_var_names = {
+        upstream_scheme            = true,
+        upstream_host              = true,
+        ...
+
+        var_x_forwarded_proto = true,
+    }
+
+    local mt = {
+        -- 重载 hash 元方法
+        -- t 是 self
+        __index = function(t, key)
+
+            -- 若 cache table 存在直接返回
+            local cached = t._cache[key]
+            if cached ~= nil then
+                return cached
+            end
+
+            if type(key) ~= &quot;string&quot; then
+                error(&quot;invalid argument, expect string value&quot;, 2)
+            end
+
+            local val
+            -- 如果是特殊类型, 使用特定方法获取
+            local method = var_methods[key]
+            if method then
+                val = method()
+
+            elseif core_str.has_prefix(key, &quot;cookie_&quot;) then
+                -- 通过 var_methods 访问到 resty.cookie
+                local cookie = t.cookie
+                if cookie then
+                    local err
+                    val, err = cookie:get(sub_str(key, 8))
+                    if not val then
+                        log.warn(&quot;failed to fetch cookie value by key: &quot;,
+                                 key, &quot; error: &quot;, err)
+                    end
+                end
+
+            elseif core_str.has_prefix(key, &quot;http_&quot;) then
+                key = key:lower()
+                key = re_gsub(key, &quot;-&quot;, &quot;_&quot;, &quot;jo&quot;)
+                -- 最终通过 ngx.var 获取
+                val = get_var(key, t._request)
+
+            elseif core_str.has_prefix(key, &quot;graphql_&quot;) then
+                -- trim the &quot;graphql_&quot; prefix
+                key = sub_str(key, 9)
+                val = get_parsed_graphql(t)[key]
+
+            elseif key == &quot;route_id&quot; then
+                val = ngx.ctx.api_ctx and ngx.ctx.api_ctx.route_id
+
+            elseif key == &quot;service_id&quot; then
+                val = ngx.ctx.api_ctx and ngx.ctx.api_ctx.service_id
+
+            elseif key == &quot;consumer_name&quot; then
+                val = ngx.ctx.api_ctx and ngx.ctx.api_ctx.consumer_name
+
+            elseif key == &quot;route_name&quot; then
+                val = ngx.ctx.api_ctx and ngx.ctx.api_ctx.route_name
+
+            elseif key == &quot;service_name&quot; then
+                val = ngx.ctx.api_ctx and ngx.ctx.api_ctx.service_name
+
+            elseif key == &quot;balancer_ip&quot; then
+                val = ngx.ctx.api_ctx and ngx.ctx.api_ctx.balancer_ip
+
+            elseif key == &quot;balancer_port&quot; then
+                val = ngx.ctx.api_ctx and ngx.ctx.api_ctx.balancer_port
+
+            else
+                val = get_var(key, t._request)
+            end
+
+            if val ~= nil then
+                t._cache[key] = val
+            end
+
+            -- 为空返回 nil
+            return val
+        end,
+
+        __newindex = function(t, key, val)
+            if ngx_var_names[key] then
+                ngx_var[key] = val
+            end
+
+            -- log.info(&quot;key: &quot;, key, &quot; new val: &quot;, val)
+            t._cache[key] = val
+        end,
+    }
+</code></pre>
+<p>部分 APISIX 路由匹配的内部参数在其他阶段注入。</p>
+<h5 id=2232-headers>2.2.3.2. headers</h5>
+<pre><code class=language-lua>-- 用 ngx.ctx table 缓存 headers, 避免再进行一次 ffi 调用
+local function _headers(ctx)
+    if not ctx then
+        ctx = ngx.ctx.api_ctx
+    end
+    local headers = ctx.headers
+    if not headers then
+        headers = get_headers()
+        ctx.headers = headers
+    end
+
+    return headers
+end
+</code></pre>
+<p>用到了上述的 ctx 库。</p>
+<h4 id=224-etcd>2.2.4. etcd</h4>
+<p>etcd 在 APISIX 中作用相同与 PostgreSQL 之于 Kong，内部使用 <a href=https://github.com/api7/lua-resty-etcd>lua-resty-etcd</a> 作为客户端，使用 timer 定时执行和长轮询获取跟踪 etcd 中数据的变化。</p>
+<p>这里的优化点与 Kong 一样，在 <code>init_by_lua</code> 阶段进行数据的 warm up，之后数据会 fork 到其他的进程中。</p>
+<blockquote>
+<p>It does not really make much sense to use this library in the context of <a href=https://github.com/openresty/lua-nginx-module#lua_shared_dict>init_by_lua</a> because the cache will not get shared by any of the worker processes (unless you just want to &ldquo;warm up&rdquo; the cache with predefined items which will get inherited by the workers via <code>fork()</code>).<sup id=fnref:8><a href=#fn:8 class=footnote-ref role=doc-noteref>8</a></sup></p>
+</blockquote>
+<h5 id=2241-初始化>2.2.4.1. 初始化</h5>
+<p>读取 etcd 数据到全局单例的 Lua table。</p>
+<pre><code class=language-lua>-- 初始化 etcd
+function _M.init()
+    local local_conf, err = config_local.local_conf()
+    if not local_conf then
+        return nil, err
+    end
+
+    if table.try_read_attr(local_conf, &quot;apisix&quot;, &quot;disable_sync_configuration_during_start&quot;) then
+        return true
+    end
+
+    -- 获取 etcd cli
+    local etcd_cli, err = get_etcd()
+    if not etcd_cli then
+        return nil, &quot;failed to start a etcd instance: &quot; .. err
+    end
+
+    local etcd_conf = local_conf.etcd
+    local prefix = etcd_conf.prefix
+    -- 加载 etcd 所有数据到 lua table 中, 单例模式
+    local res, err = readdir(etcd_cli, prefix, create_formatter(prefix))
+    if not res then
+        return nil, err
+    end
+
+    return true
+end
+</code></pre>
+<p>对数据进行格式化，存入 Lua table 中：</p>
+<pre><code class=language-lua>-- 创建格式化 formatter
+local function create_formatter(prefix)
+    -- 返回闭包函数, 对 etcd 返回的结果进行格式化
+    -- 格式个毛, 这就是个 hook 函数
+    return function (res)
+        res.body.nodes = {}
+
+        local dirs
+        if is_http then
+            dirs = constants.HTTP_ETCD_DIRECTORY
+        else
+            dirs = constants.STREAM_ETCD_DIRECTORY
+        end
+
+        local curr_dir_data
+        local curr_key
+        for _, item in ipairs(res.body.kvs) do
+            if curr_dir_data then
+                -- 将匹配的内容插入 table
+                if core_str.has_prefix(item.key, curr_key) then
+                    table.insert(curr_dir_data, etcd_apisix.kvs_to_node(item))
+                    goto CONTINUE
+                end
+
+                curr_dir_data = nil
+            end
+
+            -- 截取 prefix 后的 key
+            local key = sub_str(item.key, #prefix + 1)
+            if dirs[key] then
+                -- single item
+                loaded_configuration[key] = {
+                    body = etcd_apisix.kvs_to_node(item),
+                    headers = res.headers,
+                }
+            else
+                -- 前缀一致
+                local key = sub_str(item.key, #prefix + 1, #item.key - 1) -- 去掉末尾的 /
+                -- ensure the same key hasn't been handled as single item
+                if dirs[key] and not loaded_configuration[key] then
+                    loaded_configuration[key] = {
+                        body = {
+                            nodes = {},
+                        },
+                        headers = res.headers,
+                    }
+                    curr_dir_data = loaded_configuration[key].body.nodes
+                    curr_key = item.key
+                end
+            end
+
+            ::CONTINUE::
+        end
+
+        return res
+    end
+end
+</code></pre>
+<p>这部分逻辑在 <code>init_by_lua</code> 执行，fork 到其他子进程。</p>
+<h5 id=2242-数据校验>2.2.4.2. 数据校验</h5>
+<p><code>schema_def.lua</code> 文件中定义了所有储存数据结构的 schema 校验规则，使用 <a href=https://github.com/api7/jsonschema>jsonschema</a> 库进行数据校验。</p>
+<p><code>core/schema.lua</code> 中使用 LRU 缓存校验器。</p>
+<p><code>load_full_data</code> 函数加载数据结构所需的 etcd kvs，并进行数据转换、校验、格式化、执行回调。</p>
+<pre><code class=language-mermaid>graph TD
+	1[创建 table 缓存新数据] --&gt; 2[jsonschema 校验数据格式]
+	2 --&gt; 3[自定义 check 函数检查数据格式]
+	3 --&gt; 4[自定义 filter 函数过滤数据]
+	4 --&gt; 5[etcd 更新 mvcc 版本]
+</code></pre>
+<pre><code class=language-lua>local function load_full_data(self, dir_res, headers)
+    local err
+    local changed = false
+
+    if self.single_item then
+        -- table size 为 1
+        ...
+        -- 执行逻辑与下面数组格式类似
+    else
+        if not dir_res.nodes then
+            dir_res.nodes = {}
+        end
+
+        self.values = new_tab(#dir_res.nodes, 0)
+        self.values_hash = new_tab(0, #dir_res.nodes)
+
+        for _, item in ipairs(dir_res.nodes) do
+            local key = short_key(self, item.key)
+            local data_valid = true
+            
+            -- 数据格式校验...
+
+            -- schema 校验...
+
+            -- 过滤器...
+
+            if data_valid then
+                changed = true
+                insert_tab(self.values, item)
+                self.values_hash[key] = #self.values
+
+                item.value.id = key
+                item.clean_handlers = {}
+
+                -- 执行回调
+                if self.filter then
+                    self.filter(item)
+                end
+            end
+			-- 更新 mvcc 版本
+            self:upgrade_version(item.modifiedIndex)
+        end
+    end
+	...
+    self.need_reload = false
+end
+</code></pre>
+<h5 id=2243-后台数据同步>2.2.4.3. 后台数据同步</h5>
+<p>利用 etcd watch 机制进行数据变更的同步。</p>
+<pre><code class=language-mermaid>graph TD
+	A[触发定时器] --&gt; C[同步数据]
+	subgraph 同步数据
+		C{ }
+		C --&gt; |全量加载?| D[全量数据获取]
+		C --&gt; |watch?| E[Watch 变化]
+		F[格式化] --&gt; G[数据校验] --&gt; H[执行回调]
+		D --&gt; F
+		E --&gt; F
+	end
+	
+</code></pre>
+<pre><code class=language-lua>-- 定时器自动同步 etcd 数据
+local function _automatic_fetch(premature, self)
+    if premature then
+        return
+    end
+
+    local i = 0
+    while not exiting() and self.running and i &lt;= 32 do
+        i = i + 1
+
+        local ok, err = xpcall(function()
+            if not self.etcd_cli then
+                local etcd_cli, err = get_etcd()
+                if not etcd_cli then
+                    error(&quot;failed to create etcd instance for key [&quot;
+                          .. self.key .. &quot;]: &quot; .. (err or &quot;unknown&quot;))
+                end
+                self.etcd_cli = etcd_cli
+            end
+
+            -- 同步数据
+            local ok, err = sync_data(self)
+            if err then
+                if err ~= &quot;timeout&quot; and err ~= &quot;Key not found&quot;
+                    and self.last_err ~= err then
+                    log.error(&quot;failed to fetch data from etcd: &quot;, err, &quot;, &quot;,
+                              tostring(self))
+                end
+
+                if err ~= self.last_err then
+                    self.last_err = err
+                    self.last_err_time = ngx_time()
+                else
+                    if ngx_time() - self.last_err_time &gt;= 30 then
+                        self.last_err = nil
+                    end
+                end
+
+                ngx_sleep(self.resync_delay + rand() * 0.5 * self.resync_delay)
+            elseif not ok then
+                -- no error. reentry the sync with different state
+                ngx_sleep(0.05)
+            end
+
+        end, debug.traceback)
+
+        if not ok then
+            log.error(&quot;failed to fetch data from etcd: &quot;, err, &quot;, &quot;,
+                      tostring(self))
+            ngx_sleep(self.resync_delay + rand() * 0.5 * self.resync_delay)
+            break
+        end
+    end
+
+    -- 进行下一次循环
+    if not exiting() and self.running then
+        ngx_timer_at(0, _automatic_fetch, self)
+    end
+end
+</code></pre>
+<h5 id=2244-配置同步>2.2.4.4. 配置同步</h5>
+<p>封装上述的逻辑提供给 <code>routes</code>、<code>plugins</code>、<code>services</code> 等数据结构使用，每个数据结构监听自己的 prefix，同步数据并执行回调，通常在回调逻辑上触发更新，例如重新构建 Router、重新构建 plugins table 等。</p>
+<pre><code class=language-lua>-- etcd 配置创建
+function _M.new(key, opts)
+    local local_conf, err = config_local.local_conf()
+    if not local_conf then
+        return nil, err
+    end
+
+    -- etcd 重新同步事件 5 秒, 与 Kong 重新 poll db 数据一致
+    local etcd_conf = local_conf.etcd
+    local prefix = etcd_conf.prefix
+    local resync_delay = etcd_conf.resync_delay
+    if not resync_delay or resync_delay &lt; 0 then
+        resync_delay = 5
+    end
+
+    local automatic = opts and opts.automatic
+    local item_schema = opts and opts.item_schema
+    local filter_fun = opts and opts.filter
+    local timeout = opts and opts.timeout
+    local single_item = opts and opts.single_item
+    local checker = opts and opts.checker
+
+    local obj = setmetatable({
+        etcd_cli = nil,
+        key = key and prefix .. key,
+        automatic = automatic,
+        item_schema = item_schema,
+        checker = checker,
+        sync_times = 0,
+        running = true,
+        conf_version = 0,
+        values = nil,
+        need_reload = true,
+        routes_hash = nil,
+        prev_index = 0,
+        last_err = nil,
+        last_err_time = nil,
+        resync_delay = resync_delay,
+        timeout = timeout,
+        single_item = single_item,
+        filter = filter_fun,
+    }, mt)
+
+    if automatic then
+        -- timer 定时获取数据
+        if not key then
+            return nil, &quot;missing `key` argument&quot;
+        end
+
+        -- 从单例 table 获取 etcd 数据, 进行处理
+        if loaded_configuration[key] then
+            local res = loaded_configuration[key]
+            -- 清空 table
+            loaded_configuration[key] = nil -- tried to load
+
+            log.notice(&quot;use loaded configuration &quot;, key)
+
+            local dir_res, headers = res.body, res.headers
+            -- 加载数据并校验数据, 过滤数据
+            load_full_data(obj, dir_res, headers)
+        end
+
+        -- 创建定时器自动同步
+        ngx_timer_at(0, _automatic_fetch, obj)
+
+    else
+        local etcd_cli, err = get_etcd()
+        if not etcd_cli then
+            return nil, &quot;failed to start a etcd instance: &quot; .. err
+        end
+        obj.etcd_cli = etcd_cli
+    end
+
+    if key then
+        created_obj[key] = obj
+    end
+
+    return obj
+end
+</code></pre>
+<h3 id=23-apisix-proxy>2.3. APISIX Proxy</h3>
+<p>源码中 Core 部分封装了数据获取的函数，在 API 网关主流程中通过 Nginx 生命周期串起来。</p>
+<h4 id=231-router>2.3.1. Router</h4>
+<p>APISIX 的 Router 匹配基于压缩字典树（Radix Tree）实现，主要使用 <a href=https://github.com/api7/lua-resty-radixtree>lua-resty-radixtree</a> 库。内置多种解析模式，这里只关注 HTTP 默认的 <code>radixtree_uri</code> 实现。</p>
+<h5 id=2311-路由构建>2.3.1.1. 路由构建</h5>
+<p><code>core.config.new</code> 调用的是 etcd 库（<code>config_etcd.lua</code>）维护的配置同步方法，返回原表，可以访问从 etcd 同步的数据。<code>core.schema.route</code> 包含了 route 这个数据结构的 schema 及校验规则，<code>check_route</code> 内部检查 route 直接绑定 plugin 的数据结构。</p>
+<blockquote>
+<p>APISIX 引入 route 直接绑定 plugin 的简化配置，不需要额外创建 plugin 对象。</p>
+</blockquote>
+<pre><code class=language-lua>-- 初始化 router
+function _M.init_worker(filter)
+    local user_routes, err = core.config.new(&quot;/routes&quot;, {
+            automatic = true, -- 自动同步
+            item_schema = core.schema.route,
+            checker = check_route,
+            filter = filter,
+        })
+    if not user_routes then
+        error(&quot;failed to create etcd instance for fetching /routes : &quot; .. err)
+    end
+
+    return user_routes
+end
+</code></pre>
+<p><code>filter</code> 是回调函数，下述的流程中会注入。</p>
+<h5 id=2312-路由初始化>2.3.1.2. 路由初始化</h5>
+<p><code>router.http_init_worker</code> 中进行 Router 初始化。</p>
+<pre><code class=language-mermaid>graph TD
+	1[&quot;1. 加载不同模式的 router (uri/sni), 引入不同的 lua 库&quot;]
+	2[2. 创建 router 实例]
+	3[3. 添加初始化回调]
+	4[&quot;4. etcd 获取数据并执行回调 (后台自动更新)&quot;]
+	5[5. filter callback 格式化, 解析 upstream]
+	6[&quot;6. 修改 router user_routes 数据 (router match 使用)&quot;]
+	1 --&gt; 2 --&gt; 3 --&gt; 4 --&gt; 5 --&gt;6
+</code></pre>
+<pre><code class=language-lua>-- attach common methods if the router doesn't provide its custom implementation
+local function attach_http_router_common_methods(http_router)
+    ...
+
+    if http_router.init_worker == nil then
+        http_router.init_worker = function (filter)
+            -- 添加路由
+            http_router.user_routes = http_route.init_worker(filter)
+        end
+    end
+end
+
+
+function _M.http_init_worker()
+    local conf = core.config.local_conf()
+    -- 默认的匹配模式
+    local router_http_name = &quot;radixtree_uri&quot;
+    local router_ssl_name = &quot;radixtree_sni&quot;
+
+    if conf and conf.apisix and conf.apisix.router then
+        router_http_name = conf.apisix.router.http or router_http_name
+        router_ssl_name = conf.apisix.router.ssl or router_ssl_name
+    end
+
+    -- 创建 router 实例
+    local router_http = require(&quot;apisix.http.router.&quot; .. router_http_name)
+    -- 修改 router 的 table
+    attach_http_router_common_methods(router_http)
+    -- 初始化路由
+    -- 调用 apisix.http.route.init_worker 方法
+    -- 从 etcd 获取数据并执行回调
+    -- filter 为格式化, 解析 upstream
+    router_http.init_worker(filter)
+    _M.router_http = router_http
+
+    local router_ssl = require(&quot;apisix.ssl.router.&quot; .. router_ssl_name)
+    router_ssl.init_worker()
+    _M.router_ssl = router_ssl
+
+    _M.api = require(&quot;apisix.api_router&quot;)
+
+    ...
+end
+</code></pre>
+<p><code>http_router.user_routes</code> 储存在 router 的 table 中，会在路由匹配时用到（懒加载）。</p>
+<h5 id=2313-路由匹配>2.3.1.3. 路由匹配</h5>
+<p><code>access_by_lua</code> 阶段中进行路由匹配，将匹配结果（route、service）传递到 ctx 中供 balancer 请求上游。</p>
+<pre><code class=language-lua>do
+    local uri_routes = {}
+    local uri_router
+    local match_opts = {}
+    
+    function _M.match(api_ctx)
+        -- 从 module 的 user_routes 属性获取路由, 在 etcd route 变化时回调添加
+        local user_routes = _M.user_routes
+        if not cached_version or cached_version ~= user_routes.conf_version then
+            uri_router = base_router.create_radixtree_uri_router(user_routes.values,
+                                                                uri_routes, false)
+            cached_version = user_routes.conf_version
+        end
+
+        if not uri_router then
+            core.log.error(&quot;failed to fetch valid `uri` router: &quot;)
+            return true
+        end
+
+        return base_router.match_uri(uri_router, match_opts, api_ctx)
+    end
+
+end
+</code></pre>
+<p><code>radixtree</code> 路由匹配库提供了匹配成功回调 handler，匹配成功后传递到 ctx 中。</p>
+<pre><code class=language-lua>core.table.insert(uri_routes, {
+                ...
+                handler = function (api_ctx, match_opts)
+                    api_ctx.matched_params = nil
+                    api_ctx.matched_route = route
+                    api_ctx.curr_req_matched = match_opts.matched
+                end
+            })
+</code></pre>
+<h4 id=232-balancer>2.3.2. Balancer</h4>
+<p>Balancer 部分与 Kong 逻辑一致，甚至代码里函数名都一样，主要逻辑是 Service/Upstream 节点解析、负载均衡策略、健康检查与失败重试。</p>
+<p>APISIX 支持的一特性是外部服务发现，Kong 中默认支持通过 DNS 解析 Service host，根据 AAAA、A、SRV 记录添加 IP 与优先级，APISIX 支持了从 consul、eruka 和其他注册中心获取 IP 地址列表，并同步节点数据（长轮询）。</p>
+<h5 id=2321-服务发现>2.3.2.1. 服务发现</h5>
+<p>如果 serivce host 是域名, 通过外部注册中心进行服务发现，获取上游 IP 列表。</p>
+<pre><code class=language-lua>function _M.set_by_route(route, api_ctx)
+   	...
+    -- 如果 serivce host 是域名, 通过 discovery 发现, dns 解析
+    if up_conf.service_name then
+        ...
+        -- 外部注册中心
+        local dis = discovery[up_conf.discovery_type]
+        if not dis then
+            return 500, &quot;discovery &quot; .. up_conf.discovery_type .. &quot; is uninitialized&quot;
+        end
+
+        -- 从注册中心数据源（缓存本地 table）获取 IP
+        local new_nodes, err = dis.nodes(up_conf.service_name)
+        if not new_nodes then
+            return HTTP_CODE_UPSTREAM_UNAVAILABLE, &quot;no valid upstream node: &quot; .. (err or &quot;nil&quot;)
+        end
+
+        ...
+    end
+
+    -- 将 upstream 节点信息存入 ctx
+    set_directly(api_ctx, up_conf.type .. &quot;#upstream_&quot; .. tostring(up_conf),
+                 api_ctx.conf_version, up_conf)
+
+    local nodes_count = up_conf.nodes and #up_conf.nodes or 0
+    if nodes_count == 0 then
+        return HTTP_CODE_UPSTREAM_UNAVAILABLE, &quot;no valid upstream node&quot;
+    end
+	...
+
+    set_upstream_scheme(api_ctx, up_conf)
+
+    local ok, err = fill_node_info(up_conf, api_ctx.upstream_scheme, false)
+    if not ok then
+        return 503, err
+    end
+    ...
+
+    local scheme = up_conf.scheme
+    if (scheme == &quot;https&quot; or scheme == &quot;grpcs&quot;) and up_conf.tls then
+        ...
+    end
+
+    return
+end
+</code></pre>
+<h5 id=2322-负载均衡>2.3.2.2. 负载均衡</h5>
+<p>不同于 Kong 使用自己封装的 <a href=https://github.com/Kong/lua-resty-dns-client/tree/master/src/resty/dns/balancer>lua-resty-dns-client/balancer</a> 作为负载均衡器，APISIX 基于 <a href=https://github.com/openresty/lua-resty-balancer>lua-resty-balancer</a> 封装了负载均衡策略，基于 <a href=https://github.com/Kong/lua-resty-healthcheck>lua-resty-healthcheck</a>（fork 版本）实现节点健康检查。</p>
+<p>API 网关的负载均衡策略（Kong/APISIX）都是基于 OpenResty <a href=https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/balancer.md#set_current_peer>lua-resty-core/balancer</a> 提供的负载均衡函数实现，<code>set_current_peer</code> 设置当前请求上游地址，<code>set_more_tries</code> 设置请求失败重试次数，<code>get_last_failure</code> 获取上一次请求失败结果判断是否需要继续重试，<code>set_timeouts</code> 设置单个请求超时时间。</p>
+<pre><code class=language-mermaid>graph TD
+	subgraph access_by_lua
+		a1[服务发现]
+        a2[peer 储存到 ctx]
+        a1 --&gt; a2
+	end
+	subgraph balancer_by_lua
+		b1{ }
+		b2[重新获取 peer]
+		b3[从 ctx 获取 peer]
+		b9[请求上游]
+		b1 -.-&gt; |失败重试| b2
+		b1 --&gt; b3
+		b3 --&gt; b9
+	end
+	subgraph balancer
+		c1(负载均衡)
+		c2[上报上次失败结果]
+		c1 -.-&gt; c2
+		c3[负载均衡器获取 peer]
+		c1 ---&gt; c3
+	end
+	a1 ---&gt; c1
+	b2 -.-&gt; c1
+</code></pre>
+<p><code>set_balancer_opts</code> 设置 Nginx Balancer 参数。</p>
+<pre><code class=language-lua>-- set_balancer_opts will be called in balancer phase and before any tries
+local function set_balancer_opts(route, ctx)
+    local up_conf = ctx.upstream_conf
+
+    -- If the matched route has timeout config, prefer to use the route config.
+    local timeout = nil
+    if route and route.value and route.value.timeout then
+        timeout = route.value.timeout
+    else
+        if up_conf.timeout then
+            timeout = up_conf.timeout
+        end
+    end
+    -- 设置 Nginx 请求超时时间
+    if timeout then
+        local ok, err = set_timeouts(timeout.connect, timeout.send,
+                                     timeout.read)
+        if not ok then
+            core.log.error(&quot;could not set upstream timeouts: &quot;, err)
+        end
+    end
+
+    local retries = up_conf.retries
+    if not retries or retries &lt; 0 then
+        retries = #up_conf.nodes - 1
+    end
+
+    -- 设置 Nginx 失败重试次数
+    if retries &gt; 0 then
+        local ok, err = set_more_tries(retries)
+        ...
+    end
+end
+</code></pre>
+<p>在 <code>access_by_lua</code> 阶段中服务发现，调用 balancer 库获取 peer 节点，<code>balancer_by_lua</code> 中从 ctx 中获取 peer 节点信息，访问后端节点，若失败重试（该阶段再次被调用），重新获取 peer 节点，重新创建请求（<code>recreate_request()</code>）再次访问后端节点。</p>
+<h4 id=233-plugin>2.3.3. Plugin</h4>
+<p>插件机制也与 Kong 类似，插件开发者可以定义 Schema 配置数据结构，以及 Handler 注入 Nginx 请求生命周期，API 网关提供核心的库供开发者使用（SDK）。</p>
+<p>APISIX 相比 Kong，开源的插件较多，插件 Schema 便于编写，同时插件只需要单文件，而 Kong 的插件通常是单独一个仓库，不方便维护。但是考虑到插件需要单独的 Test::Nginx 单元测试，单独一个仓库也未尝不可（Kong 还说了以后会把 Github 项目主仓库的插件代码移到单独的仓库）。</p>
+<p>具体各个阶段执行逻辑应该与 Kong 相同，即部分阶段插件开协程并发执行，部分阶段避免数据竞争，插件顺序执行。</p>
+<p>值得注意的一点是 APISIX 生命周期里没有 <code>rewrite_by_lua</code> 阶段，插件实现的该阶段会在 <code>access_by_lua</code> 中优先于 <code>access_by_lua</code> 插件逻辑执行。</p>
+<blockquote>
+<p>The apisix run both &ldquo;.access&rdquo; and &ldquo;.rewrite&rdquo; in the &ldquo;access&rdquo; phase.<sup id=fnref:9><a href=#fn:9 class=footnote-ref role=doc-noteref>9</a></sup></p>
+</blockquote>
+<h5 id=2331-插件加载>2.3.3.1. 插件加载</h5>
+<p>插件列表从本地 yaml 文件获取，同时监听本地文件变化，同步配置；插件配置信息从 etcd 获取。</p>
+<pre><code class=language-lua>local init_plugins_syncer
+do
+    local plugins_conf
+
+    function init_plugins_syncer()
+        local err
+        -- 储存插件的配置信息, 一条 kv
+        plugins_conf, err = core.config.new(&quot;/plugins&quot;, {
+            automatic = true, -- 后台创建 timer watch etcd 自动同步配置
+            item_schema = core.schema.plugins,
+            single_item = true,
+            -- filter 方法中访问到 etcd kv 的 item, 这里进行插件加载的回调
+            -- 每次 etcd 插件配置变动, 自动同步
+            filter = function(item)
+                -- we need to pass 'item' instead of plugins_conf because
+                -- the latter one is nil at the first run
+                _M.load(item)
+            end,
+        })
+        if not plugins_conf then
+            error(&quot;failed to create etcd instance for fetching /plugins : &quot; .. err)
+        end
+    end
+end
+</code></pre>
+<p>插件列表会储存到 Lua table 中：</p>
+<pre><code class=language-lua>-- 加载插件
+local function load(plugin_names)
+    local processed = {}
+    for _, name in ipairs(plugin_names) do
+        if processed[name] == nil then
+            processed[name] = true
+        end
+    end
+
+    core.log.warn(&quot;new plugins: &quot;, core.json.delay_encode(processed))
+
+    -- 移除已经存在的 module
+    for name in pairs(local_plugins_hash) do
+        unload_plugin(name)
+    end
+
+    core.table.clear(local_plugins)
+    core.table.clear(local_plugins_hash)
+
+    -- 加载插件
+    for name in pairs(processed) do
+        load_plugin(name, local_plugins)
+    end
+
+    -- 插件排序, priority 越高的插件越先执行, 与 Kong 同样
+    -- sort by plugin's priority
+    if #local_plugins &gt; 1 then
+        sort_tab(local_plugins, sort_plugin)
+    end
+
+    -- 打印调试日志
+    for i, plugin in ipairs(local_plugins) do
+        ...
+    end
+
+    return true
+end
+</code></pre>
+<p>插件配置信息 <code>plugin_meta</code> 也加载到 Lua table 中，在插件匹配的时候会获取。</p>
+<h5 id=2332-插件匹配>2.3.3.2. 插件匹配</h5>
+<p>插件过滤，遍历插件列表，匹配开启的插件，O(n) 操作 <code>plugin.filter(route)</code> ：</p>
+<pre><code class=language-lua>-- 插件配置绑定
+function _M.filter(user_route, plugins)
+    ...
+
+    plugins = plugins or core.tablepool.fetch(&quot;plugins&quot;, 32, 0)
+    for _, plugin_obj in ipairs(local_plugins) do
+        local name = plugin_obj.name
+        local plugin_conf = user_plugin_conf[name]
+
+        -- 插件和插件配置存入
+        if type(plugin_conf) == &quot;table&quot; and not plugin_conf.disable then
+            core.table.insert(plugins, plugin_obj)
+            core.table.insert(plugins, plugin_conf)
+        end
+    end
+
+    trace_plugins_info_for_debug(plugins)
+
+    return plugins
+end
+</code></pre>
+<h5 id=2333-插件执行>2.3.3.3. 插件执行</h5>
+<p>这里以 <code>access_by_lua</code> 阶段插件执行逻辑为例，根据 Route、Service 匹配插件，创建临时 Table 储存 plugin 和 plugin_conf，存入 ctx 中。</p>
+<pre><code class=language-lua>        -- 插件过滤, 遍历插件列表, 匹配开启的插件, O(n)
+        local plugins = plugin.filter(route)
+        api_ctx.plugins = plugins
+
+        -- fake 执行 rewrite 阶段
+        plugin.run_plugin(&quot;rewrite&quot;, plugins, api_ctx)
+        if api_ctx.consumer then
+            local changed
+            route, changed = plugin.merge_consumer_route(
+                route,
+                api_ctx.consumer,
+                api_ctx
+            )
+
+            core.log.info(&quot;find consumer &quot;, api_ctx.consumer.username,
+                          &quot;, config changed: &quot;, changed)
+
+            if changed then
+                core.table.clear(api_ctx.plugins)
+                api_ctx.plugins = plugin.filter(route, api_ctx.plugins)
+            end
+        end
+        -- 执行 access 阶段
+        plugin.run_plugin(&quot;access&quot;, plugins, api_ctx)
+</code></pre>
+<h4 id=234-主流程>2.3.4. 主流程</h4>
+<p>以 Nginx HTTP Subsystem 为例分析主要执行逻辑，其中一些核心逻辑已在上述小节中流程分析过。</p>
+<h5 id=2341-init_by_lua>2.3.4.1. init_by_lua</h5>
+<pre><code class=language-mermaid>graph TD
+	1[&quot;1. 加载 resty.core&quot;]
+	2[&quot;2. ngx.re JIT 缓存参数优化&quot;]
+	3[&quot;3. LuaJIT 参数优化&quot;]
+	4[&quot;4. dns client 初始化&quot;]
+	5[&quot;5. 生成节点 id&quot;]
+	6[&quot;6. 开启 openresty 特权进程&quot;]
+	7[&quot;7. 读取配置文件并校验有效性 (本地文件/etcd)&quot;]
+	1 --&gt; 2 --&gt; 3 --&gt; 4
+	4 --&gt; 5 --&gt; 6 --&gt; 7
+</code></pre>
+<pre><code class=language-lua>function _M.http_init(args)
+    require(&quot;resty.core&quot;)
+
+    if require(&quot;ffi&quot;).os == &quot;Linux&quot; then
+        require(&quot;ngx.re&quot;).opt(&quot;jit_stack_size&quot;, 200 * 1024)
+    end
+
+    require(&quot;jit.opt&quot;).start(&quot;minstitch=2&quot;, &quot;maxtrace=4000&quot;,
+                             &quot;maxrecord=8000&quot;, &quot;sizemcode=64&quot;,
+                             &quot;maxmcode=4000&quot;, &quot;maxirconst=1000&quot;)
+
+    core.resolver.init_resolver(args)
+    -- 生成节点 ID
+    core.id.init()
+
+    -- 启用 openresty 的特权进程
+    local process = require(&quot;ngx.process&quot;)
+    local ok, err = process.enable_privileged_agent()
+    if not ok then
+        core.log.error(&quot;failed to enable privileged_agent: &quot;, err)
+    end
+
+    -- 从 etcd / yaml 本地配置文件获取配置, etcd 有 init 函数
+    if core.config.init then
+        local ok, err = core.config.init()
+        if not ok then
+            core.log.error(&quot;failed to load the configuration: &quot;, err)
+        end
+    end
+end
+</code></pre>
+<h5 id=2342-init_worker_by_lua>2.3.4.2. init_worker_by_lua</h5>
+<pre><code class=language-mermaid>graph TD
+	1[&quot;1. random seed 初始化&quot;]
+	2[&quot;2. 外部服务发现 (默认没有开启, consul, dubbo)&quot;]
+	3[&quot;3. 初始化负载均衡器 balancer (HTTP/Upstream) 创建 LRU 缓存&quot;]
+	4[&quot;4. 加载 Admin API&quot;]
+	5[&quot;5. 创建后台 timer&quot;]
+	6[&quot;6. 加载所有插件并执行插件 init 方法&quot;]
+	7[&quot;7. 从 etcd 获取 routes/services/upstreams&quot;]
+	1 --&gt; 2 --&gt; 3 --&gt; 4
+	4 --&gt; 5 --&gt; 6 --&gt; 7
+</code></pre>
+<pre><code class=language-mermaid>graph TD
+	subgraph &quot;7. 从 etcd 获取 routes/services/upstreams&quot;
+        71[&quot;a. 创建 router (uri/sni)&quot;]
+        72[&quot;b. 挂载 filter 回调函数&quot;]
+        73[&quot;c. 数据格式化&quot;]
+        74[&quot;d. timer watch etcd 事件变化执行回调&quot;]
+        71 --&gt; 72 --&gt; 73 --&gt; 74
+	end
+</code></pre>
+<pre><code class=language-lua>function _M.http_init_worker()
+    local seed, err = core.utils.get_seed_from_urandom()
+    if not seed then
+        core.log.warn('failed to get seed from urandom: ', err)
+        seed = ngx_now() * 1000 + ngx.worker.pid()
+    end
+    math.randomseed(seed)
+    -- for testing only
+    core.log.info(&quot;random test in [1, 10000]: &quot;, math.random(1, 10000))
+
+    -- 进程间事件通信
+    local we = require(&quot;resty.worker.events&quot;)
+    local ok, err = we.configure({shm = &quot;worker-events&quot;, interval = 0.1})
+    if not ok then
+        error(&quot;failed to init worker event: &quot; .. err)
+    end
+    -- 服务发现 lib
+    local discovery = require(&quot;apisix.discovery.init&quot;).discovery
+    -- 默认没有开启服务发现
+    if discovery and discovery.init_worker then
+        discovery.init_worker()
+    end
+    -- 初始化负载均衡器, 方法为空
+    require(&quot;apisix.balancer&quot;).init_worker()
+    -- 负载均衡器
+    load_balancer = require(&quot;apisix.balancer&quot;)
+    -- TODO admin 流程分析
+    require(&quot;apisix.admin.init&quot;).init_worker()
+    -- 注册全局 timer
+    require(&quot;apisix.timers&quot;).init_worker()
+
+    -- 加载所有插件并执行插件 init
+    plugin.init_worker()
+    -- 初始化 router, 并加载 routes
+    router.http_init_worker()
+
+    -- 初始化 services, 加载 services
+    require(&quot;apisix.http.service&quot;).init_worker()
+    -- 加载插件配置
+    plugin_config.init_worker()
+    -- consumer 加载
+    require(&quot;apisix.consumer&quot;).init_worker()
+
+    if core.config == require(&quot;apisix.core.config_yaml&quot;) then
+        core.config.init_worker()
+    end
+
+    require(&quot;apisix.debug&quot;).init_worker()
+    -- upstreams 加载
+    apisix_upstream.init_worker()
+    require(&quot;apisix.plugins.ext-plugin.init&quot;).init_worker()
+
+    local_conf = core.config.local_conf()
+
+    if local_conf.apisix and local_conf.apisix.enable_server_tokens == false then
+        ver_header = &quot;APISIX&quot;
+    end
+end
+</code></pre>
+<h5 id=2343-access_by_lua>2.3.4.3. access_by_lua</h5>
+<pre><code class=language-lua>-- access_by_lua 阶段, apisix 没有 rewrite_by_lua
+-- ref: https://github.com/apache/apisix/issues/1120
+-- ref: https://github.com/apache/apisix/issues/1120#issuecomment-584949073
+function _M.http_access_phase()
+    local ngx_ctx = ngx.ctx
+	...
+
+    -- 从 table 缓存池中获取 table
+    -- always fetch table from the table pool, we don't need a reused api_ctx
+    local api_ctx = core.tablepool.fetch(&quot;api_ctx&quot;, 0, 32)
+    -- 将 table 储存在 ngx.ctx 中, 下一个阶段共享
+    ngx_ctx.api_ctx = api_ctx
+
+    -- 绑定 metatable 
+    core.ctx.set_vars_meta(api_ctx)
+	...
+
+    -- router 路由匹配
+    router.router_http.match(api_ctx)
+
+    -- run global rule
+    plugin.run_global_rules(api_ctx, router.global_rules, nil)
+
+    ...
+    local enable_websocket = route.value.enable_websocket
+
+    -- route 插件配置绑定
+    if route.value.plugin_config_id then
+       	...
+        route = plugin_config.merge(route, conf)
+    end
+
+    -- 获取对应的 service
+    if route.value.service_id then
+        local service = service_fetch(route.value.service_id)
+        ...
+        if enable_websocket == nil then
+            enable_websocket = service.value.enable_websocket
+        end
+
+    else
+        ...
+    end
+    api_ctx.route_id = route.value.id
+    api_ctx.route_name = route.value.name
+
+    -- 执行 script
+    if route.value.script then
+        script.load(route, api_ctx)
+        script.run(&quot;access&quot;, api_ctx)
+    else
+        -- 插件过滤, 遍历插件列表, 匹配开启的插件, O(n)
+        local plugins = plugin.filter(route)
+        api_ctx.plugins = plugins
+
+        -- fake 执行 rewrite 阶段
+        plugin.run_plugin(&quot;rewrite&quot;, plugins, api_ctx)
+        if api_ctx.consumer then
+            local changed
+            route, changed = plugin.merge_consumer_route(
+                route,
+                api_ctx.consumer,
+                api_ctx
+            )
+
+            core.log.info(&quot;find consumer &quot;, api_ctx.consumer.username,
+                          &quot;, config changed: &quot;, changed)
+
+            if changed then
+                core.table.clear(api_ctx.plugins)
+                api_ctx.plugins = plugin.filter(route, api_ctx.plugins)
+            end
+        end
+        -- 执行 access 阶段
+        plugin.run_plugin(&quot;access&quot;, plugins, api_ctx)
+    end
+
+    local up_id = route.value.upstream_id
+
+    -- used for the traffic-split plugin
+    if api_ctx.upstream_id then
+        up_id = api_ctx.upstream_id
+    end
+	...
+
+    -- websocket 特殊处理
+    if enable_websocket then
+        api_ctx.var.upstream_upgrade    = api_ctx.var.http_upgrade
+        api_ctx.var.upstream_connection = api_ctx.var.http_connection
+        core.log.info(&quot;enabled websocket for route: &quot;, route.value.id)
+    end
+
+    if route.value.service_protocol == &quot;grpc&quot; then
+        api_ctx.upstream_scheme = &quot;grpc&quot;
+    end
+
+    -- 获取 upstream 节点
+    local code, err = set_upstream(route, api_ctx)
+    if code then
+        core.log.error(&quot;failed to set upstream: &quot;, err)
+        core.response.exit(code)
+    end
+
+    -- 负载均衡
+    local server, err = load_balancer.pick_server(route, api_ctx)
+    if not server then
+        core.log.error(&quot;failed to pick server: &quot;, err)
+        return core.response.exit(502)
+    end
+
+    api_ctx.picked_server = server
+
+    set_upstream_headers(api_ctx, server)
+
+    -- stash ngx ctx 这部分与 Kong 一致, 怀疑是抄来的（95% 置信区间）
+    ngx_var.ctx_ref = ctxdump.stash_ngx_ctx()
+    local up_scheme = api_ctx.upstream_scheme
+    if up_scheme == &quot;grpcs&quot; or up_scheme == &quot;grpc&quot; then
+        return ngx.exec(&quot;@grpc_pass&quot;)
+    end
+
+    if api_ctx.dubbo_proxy_enabled then
+        return ngx.exec(&quot;@dubbo_pass&quot;)
+    end
+end
+</code></pre>
+<h2 id=3-一些思考>3. 一些思考</h2>
+<h3 id=31-边缘计算>3.1. 边缘计算</h3>
+<blockquote>
+<p>对于互联网设备，网络边缘是设备或包含设备的本地网络与互联网通信的位置。边缘是个比较模糊的术语。例如，可以将用户的计算机或 IoT 摄像头内部的处理器视为网络边缘，但也可以将用户的路由器、ISP 或本地边缘服务器视为边缘。重要的是，网络边缘在地理位置上靠近设备，与<a href=https://www.cloudflare.com/learning/cdn/glossary/origin-server/>源站</a>和云服务器不同，后者可能与它们相互通信的设备相距很远。</p>
+<p>完全减轻额外硬件需求的一种方法是利用边缘服务器。例如，借助 Cloudflare 分散在全球各地的 194 个边缘服务器网络，Cloudflare 的客户可以使用 <a href=https://www.cloudflare.com/products/cloudflare-workers/>Cloudflare Workers</a> 在全球范围内运行边缘代码。<sup id=fnref:10><a href=#fn:10 class=footnote-ref role=doc-noteref>10</a></sup></p>
+</blockquote>
+<p>Cloudflare 的边缘计算是基于 Edge Gateway（边缘网关、边缘集群）的 Serverless 代码执行，提供了 JS 代码执行，以及 WASM 二进制。<sup id=fnref:11><a href=#fn:11 class=footnote-ref role=doc-noteref>11</a></sup></p>
+<p>
+<figure class=image>
+<img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/image-20210611155454963.png alt loading=lazy>
+</figure></p>
+<p><em>一些相关的 Issue:</em></p>
+<ul>
+<li>
+<p><a href=https://github.com/openresty/openresty/issues/541>Support wasm in openresty?</a>
+<figure class=image>
+<img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/image-20210611160051987.png alt loading=lazy>
+</figure></p>
+</li>
+<li>
+<p><a href=https://github.com/apache/apisix/issues/157>feature: support WebAssembly in apisix.</a>
+<figure class=image>
+<img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/image-20210611160137790.png alt loading=lazy>
+</figure></p>
+</li>
+</ul>
+<h4 id=311-lua-serverless>3.1.1. Lua (Serverless)</h4>
+<p>APISIX 的 Serverless 插件功能支持注入任何 Lua 脚本，Kong 也支持对应的功能，APISIX 就是抄的 Kong 的插件功能。<sup id=fnref:12><a href=#fn:12 class=footnote-ref role=doc-noteref>12</a></sup></p>
+<p>
+<figure class=image>
+<img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/image-20210611160354452.png alt loading=lazy>
+</figure></p>
+<p>只支持最简单的函数执行。</p>
+<h4 id=312-wasm-vm>3.1.2. WASM VM</h4>
+<p>LuaJIT 的 FFI 功能能非常方便和高性能地调用 C lib，能通过 C 进行内存管理，或者交由 LuaJIT 自动 gc（该部分还在学习中）。</p>
+<p>出于性能最好的开源 WASM VM 引擎 <a href=https://github.com/WasmEdge/WasmEdge>WasmEdge</a>（C++ 编写）提供 C API，我尝试在 LuaJIT 中加载 <code>.so</code> 调用 WasmEdge 创建 VM 虚拟机（VMContext），执行 <code>.wasm</code> 文件。</p>
+<blockquote>
+<p>这部分代码还在进行中，主要目的是熟悉 WASM 基本操作，以及学习 LuaJIT FFI 调用方法（还需要学习一些 C 知识）。<sup id=fnref:13><a href=#fn:13 class=footnote-ref role=doc-noteref>13</a></sup></p>
+</blockquote>
+<pre><code class=language-lua>local ffi = require &quot;ffi&quot;
+local wasmedge = ffi.load(&quot;libwasmedge.so&quot;)
+</code></pre>
+<p>加载 <code>ffi</code> 包，并加载 WasmEdge 的动态链接库。</p>
+<p>由于 LuaJIT 并不知道代码里调用的 C 函数类型是什么，需要在代码中定义 C 类型：</p>
+<blockquote>
+<p>C 类型参考 WasmEdge 提供的 C++ 导出的 C Header 文件: <a href=https://github.com/WasmEdge/WasmEdge/blob/master/include/api/wasmedge.h.in>https://github.com/WasmEdge/WasmEdge/blob/master/include/api/wasmedge.h.in</a></p>
+<p>忽略函数前面的 <code>WASMEDGE_CAPI_EXPORT extern</code> 部分（不知道是否正确）。</p>
+</blockquote>
+<pre><code class=language-lua>ffi.cdef[[
+    enum WasmEdge_ValType {
+        WasmEdge_ValType_I32 = 0x7FU,
+        WasmEdge_ValType_I64 = 0x7EU,
+        WasmEdge_ValType_F32 = 0x7DU,
+        WasmEdge_ValType_F64 = 0x7CU,
+        WasmEdge_ValType_V128 = 0x7BU,
+        WasmEdge_ValType_FuncRef = 0x70U,
+        WasmEdge_ValType_ExternRef = 0x6FU
+    };
+
+    typedef struct WasmEdge_Result {
+        uint8_t Code;
+    } WasmEdge_Result;
+
+    typedef struct WasmEdge_String {
+        uint32_t Length;
+        const char *Buf;
+    } WasmEdge_String;
+
+    typedef struct WasmEdge_Value {
+    } WasmEdge_Value;
+
+    typedef struct WasmEdge_VMContext WasmEdge_VMContext;
+    typedef struct WasmEdge_ConfigureContext WasmEdge_ConfigureContext;
+    typedef struct WasmEdge_StoreContext WasmEdge_StoreContext;
+
+    WasmEdge_ConfigureContext *WasmEdge_ConfigureCreate();
+
+    WasmEdge_String WasmEdge_StringCreateByCString(const char *Str);
+
+    WasmEdge_VMContext *
+    WasmEdge_VMCreate(const WasmEdge_ConfigureContext *ConfCxt,
+                      WasmEdge_StoreContext *StoreCxt);
+
+    const char *WasmEdge_VersionGet();
+    void WasmEdge_LogSetDebugLevel();
+    
+    WasmEdge_Result WasmEdge_VMRunWasmFromFile(
+        WasmEdge_VMContext *Cxt, const char *Path, const WasmEdge_String FuncName,
+        const WasmEdge_Value *Params, const uint32_t ParamLen,
+        WasmEdge_Value *Returns, const uint32_t ReturnLen);
+]]
+</code></pre>
+<p>首先尝试一下通过 FFI 简单获取 WasmEdge 的版本号：</p>
+<pre><code class=language-lua>local ver = wasmedge.WasmEdge_VersionGet()
+print(ffi.string(ver))
+
+-- 输出
+&lt; 0.8.0
+</code></pre>
+<p>WasmEdge 使用应该是先创建 VM，运行脚本时传入 VM 和脚本路径执行：</p>
+<pre><code class=language-lua>-- 加载一个本地编译好的 .wasm 文件
+local test_wasm_add_path = &quot;./test/wasm/add/add.wasm&quot;
+-- 创建一个默认的配置
+local vmconf = wasmedge.WasmEdge_ConfigureCreate()
+-- 创建 VM, 第二个参数是 Store, 我们默认传 null
+local vmctx = wasmedge.WasmEdge_VMCreate(vmconf, ffi.NULL)
+-- 执行 wasm
+local result = wasmedge.WasmEdge_VMRunWasmFromFile(vmctx, test_wasm_add_path, 
+        wasmedge.WasmEdge_StringCreateByCString(&quot;add&quot;), nil,
+        0, nil, 0)
+</code></pre>
+<p><code>WasmEdge_VMRunWasmFromFile</code> 接收参数 <code>WasmEdge_VMContext *Cxt</code>, <code>const char *Path</code>, <code>const WasmEdge_String FuncName</code>, <code>const WasmEdge_Value *Params</code>, <code>const uint32_t ParamLen</code>, <code>WasmEdge_Value *Returns</code>, <code>const uint32_t ReturnLen</code>。</p>
+<p>暂时还不知道怎么创建 C 结构体的参数传入，默认传 null 执行结果：</p>
+<pre><code class=language-lua>ERROR [default] execution failed: function signature mismatch, Code: 0x83
+ERROR [default]     Mismatched function type. Expected: params{i32 , i32} returns{i32} , Got: params{} returns{i32}
+</code></pre>
+<p>看上去直到参数传入为止还没问题，后续再继续研究。</p>
+<h3 id=32-mesh>3.2. Mesh</h3>
+<p>APISIX 网关的 Mesh 项目。值得一提的是 Kong 也有类似的 Mesh 项目。</p>
+<p>Repo: <a href=https://github.com/api7/apisix-mesh-agent>api7/apisix-mesh-agent</a></p>
+<p>
+<figure class=image>
+<img src=/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/images/apisix-mesh-overview.png alt loading=lazy>
+</figure></p>
+<p>Go 语言开发的 Agent，接入了 Istio 的协议：</p>
+<pre><code class=language-go>module github.com/api7/apisix-mesh-agent
+
+go 1.16
+
+require (
+	github.com/envoyproxy/go-control-plane v0.9.9-0.20210115003313-31f9241a16e6
+	github.com/envoyproxy/protoc-gen-validate v0.4.1
+	github.com/fsnotify/fsnotify v1.4.9
+	github.com/golang/protobuf v1.4.3
+	github.com/google/uuid v1.2.0
+	github.com/grpc-ecosystem/grpc-gateway v1.14.6
+	github.com/soheilhy/cmux v0.1.4
+	github.com/spf13/cobra v1.1.3
+	github.com/stretchr/testify v1.7.0
+	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5
+	go.etcd.io/etcd/api/v3 v3.5.0-alpha.0
+	go.uber.org/zap v1.16.0
+	golang.org/x/net v0.0.0-20210525063256-abc453219eb5
+	google.golang.org/genproto v0.0.0-20210222152913-aa3ee6e6a81c
+	google.golang.org/grpc v1.36.0
+	google.golang.org/grpc/examples v0.0.0-20210304020650-930c79186c99 // indirect
+	google.golang.org/protobuf v1.25.0
+	gotest.tools v2.2.0+incompatible
+	istio.io/istio v0.0.0-20210308180034-f6502508b04c
+)
+</code></pre>
+<h3 id=33-网关选型>3.3. 网关选型</h3>
+<p>APISIX 网关相当于 Kong 的重构，性能高于 Kong，资源占用较低，二次开发较为方便。但是公司内部使用的 Kong 网关目前接入了 Kong Ingress Controller，虚拟机注册的部分也用的是 Kong 开源的 Go 包，生态较为丰富。</p>
+<p>APISIX 目前还没提供 Go 的 SDK。APISIX 开源的 Traffic Split 以及 Mirror 插件也不足以满足公司流量牵引的需求。</p>
+<p>我认为公司目前仍可以继续使用 Kong 网关，经历本次 APISIX 源码阅读，与 OpenResty 相关体系的学习后二次开发能力有所提升。</p>
+<p>如果要将公司网关从 Kong 迁移到 APISIX 的附加成本很高，开发、迁移、其他部门协调时间至少需要 2 周，对比起来收益并不大，公司现在并不缺少 APISIX 的功能。</p>
+<p>阅读过源码后 APISIX 唯一比较好的功能点是支持外部注册中心，公司使用 Bilibili discovery 注册中心二次开发版本，接入注册中心后能够获取到服务更多元数据，便于后续在网关对服务进行治理。Kong 网关社区有 Consul 接入的讨论，可以继续关注该 Issue 进展，或为社区提议开发相应功能。</p>
+<p>APISIX 网关中使用到的 LuaJIT 和 OpenResty 的 Coding 性能优化技巧可以学习。</p>
+<section class=footnotes role=doc-endnotes>
+<hr>
+<ol>
+<li id=fn:1 role=doc-endnote>
+<p><a href=https://github.com/apache/apisix/issues/3207#issuecomment-759269071>How does Kong solve similar problems?</a>&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:2 role=doc-endnote>
+<p><a href=https://segmentfault.com/a/1190000016149595>LuaJIT FFI 介绍，及其在 OpenResty 中的应用（下）</a>&#160;<a href=#fnref:2 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:3 role=doc-endnote>
+<p><a href=https://yxudong.github.io/%E3%80%8AOpenResty%E7%B2%BE%E5%8D%8E%E6%95%B4%E7%90%86%E3%80%8B6.%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96/>《OpenResty精华整理》6.性能优化 </a>&#160;<a href=#fnref:3 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:4 role=doc-endnote>
+<p><a href=https://github.com/openresty/luajit2>openresty/luajit2</a>&#160;<a href=#fnref:4 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:5 role=doc-endnote>
+<p><a href=https://www.cnblogs.com/liekkas01/p/12764577.html>OpenResty：特权进程和定时任务</a>&#160;<a href=#fnref:5 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:6 role=doc-endnote>
+<p><a href=https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/process.md#enable_privileged_agent>enable_privileged_agent</a>&#160;<a href=#fnref:6 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:7 role=doc-endnote>
+<p><a href=https://github.com/openresty/lua-nginx-module/issues/1482>ngx.var vs ngx.ctx</a>&#160;<a href=#fnref:7 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:8 role=doc-endnote>
+<p><a href=https://github.com/openresty/lua-resty-lrucache#description>openresty/lua-resty-lrucache</a>&#160;<a href=#fnref:8 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:9 role=doc-endnote>
+<p><a href=https://github.com/apache/apisix/issues/1120#issuecomment-584949073>set variable inoperative!!</a>&#160;<a href=#fnref:9 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:10 role=doc-endnote>
+<p><a href=https://www.cloudflare.com/zh-cn/learning/serverless/glossary/what-is-edge-computing/>什么是边缘计算？</a>&#160;<a href=#fnref:10 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:11 role=doc-endnote>
+<p><a href=https://blog.cloudflare.com/webassembly-on-cloudflare-workers/>WebAssembly on Cloudflare Workers</a>&#160;<a href=#fnref:11 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:12 role=doc-endnote>
+<p><a href=https://github.com/apache/apisix/blob/master/docs/en/latest/plugins/serverless.md>APISIX Serverless Plugin</a>&#160;<a href=#fnref:12 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:13 role=doc-endnote>
+<p><a href=https://github.com/mayocream/lua-resty-wasm>mayocream/lua-resty-wasm</a>&#160;<a href=#fnref:13 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+</ol>
+</section>
+</div>
+<footer class=post-footer>
+<div class=post-meta>
+<time datetime=" 2021-09-27" itemprop=datePublished>Sep 27, 2021</time>
+</div>
+</footer>
+</article>
+<script src=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.min.js></script>
+<aside class=typeface-sans lang=ja>
+<nav class=toc></nav>
+</aside>
+<script>tocbot.init({tocSelector:'.toc',contentSelector:'article',headingSelector:'h1, h2, h3, h4, h5',hasInnerContainers:!0,collapseDepth:"3",positionFixedSelector:".toc",headingsOffset:10})</script>
+</div><script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/prism.min.js></script>
+<script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/plugins/filter-highlight-all/prism-filter-highlight-all.min.js></script>
+<script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/plugins/autoloader/prism-autoloader.min.js></script>
+<script>Prism.plugins.filterHighlightAll.add(function(a){return a.language!=="mermaid"})</script>
+<script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js></script>
+<script>mermaid.init({startOnLoad:!0},"pre code.language-mermaid",function(){const a=document.querySelectorAll('code.language-mermaid');for(const c of a){c.style.backgroundColor='initial';const b=c.parentNode;b.style.border='none',b.style.textAlign='center',window.darkmode&&!window.darkmode.isActivated()&&(b.style.backgroundColor='initial')}})</script>
+</div>
+</main><footer class=site-footer>
+<div class=wrapper>
+<div class=social-links>
+<a class="social-link social-github" href=https://github.com/mayocream><svg style="width:24px;height:24px" viewBox="0 0 24 24"><path fill="currentcolor" d="M12 2A10 10 0 002 12c0 4.42 2.87 8.17 6.84 9.5C9.34 21.58 9.5 21.27 9.5 21 9.5 20.77 9.5 20.14 9.5 19.31 6.73 19.91 6.14 17.97 6.14 17.97c-.46-1.16-1.11-1.47-1.11-1.47C4.12 15.88 5.1 15.9 5.1 15.9 6.1 15.97 6.63 16.93 6.63 16.93 7.5 18.45 8.97 18 9.54 17.76 9.63 17.11 9.89 16.67 10.17 16.42c-2.22-.25-4.55-1.11-4.55-4.92.0-1.11.38-2 1.03-2.71C6.55 8.54 6.2 7.5 6.75 6.15c0 0 .84-.27 2.75 1.02C10.29 6.95 11.15 6.84 12 6.84s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02C17.8 7.5 17.45 8.54 17.35 8.79 18 9.5 18.38 10.39 18.38 11.5c0 3.82-2.34 4.66-4.57 4.91C14.17 16.72 14.5 17.33 14.5 18.26c0 1.34.0 2.42.0 2.74.0.27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/></svg>
+</a>
+<a class="social-link social-rss" href=/index.xml target=_blank><svg style="width:24px;height:24px" viewBox="0 0 24 24"><path fill="currentcolor" d="M6.18 15.64a2.18 2.18.0 012.18 2.18C8.36 19 7.38 20 6.18 20 5 20 4 19 4 17.82a2.18 2.18.0 012.18-2.18M4 4.44A15.56 15.56.0 0119.56 20H16.73A12.73 12.73.0 004 7.27V4.44M4 10.1A9.9 9.9.0 0113.9 20H11.07A7.07 7.07.0 004 12.93V10.1z"/></svg>
+</a>
+</div>
+<div class=credits>
+Theme KAGAMI by Kamikat
+</div>
+</div>
+</footer><script>(function(a){for(var a=Array.prototype.slice.call(document.getElementsByClassName('baseline-fix')),b=0,c;b!=a.length;b++)c=a[b],c.innerHTML=c.innerHTML.replace(/[\u2000-\u206e⸀-\u2e7e⺀-\u2efe⼀-\u2fde⿰-\u2ffe\u3000-〾\u3040-ゞ゠-ヾ\u3100-\u312e\u3130-ㆎ㆐-㆞ㆠ-\u31be㇀-\u31eeㇰ-ㇾ㈀-㋾㌀-㏾㐀-\u4dbe一-\u9ffe\ua960-\ua97e가-\ud7ae\ud7b0-\ud7fe豈-\ufafe︰-﹎\uff00-￮]|[\ud840-\ud868\ud86a-\ud86c][\udc00-\udfff]|\ud82c[\udc00-\udcfe]|\ud869[\udc00-\udede\udf00-\udfff]|\ud86d[\udc00-\udf3e\udf40-\udfff]|\ud86e[\udc00-\udc1e]|\ud87e[\udc00-\ude1e]/g,function(a){return'<span class="baseline-fix-block">'+a+'<'+'/span>'}),c.classList.remove('baseline-fix')})(Array.prototype.slice.call(document.getElementsByClassName('baseline-fix')))</script>
+<script type=text/javascript>const resize=function(){this.width=.5*(this.naturalWidth||this.width)};Array.prototype.forEach.call(document.querySelectorAll('.half-size, .retina2x'),function(a){a.naturalWidth?resize.call(a):a.onload=resize})</script>
+<script src=https://cdn.jsdelivr.net/npm/twemoji@13.1.0/dist/twemoji.min.js></script>
+<script>twemoji.parse(document.body,{folder:'svg',ext:'.svg'})</script>
+</body>

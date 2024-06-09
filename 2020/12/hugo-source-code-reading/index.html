@@ -1,0 +1,980 @@
+<!doctype html><html lang=ja><head>
+<meta charset=utf-8>
+<meta http-equiv=x-ua-compatible content="IE=edge">
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Hugo 源码阅读 - Mayo's Blog</title>
+<meta name=description content="这篇源码阅读编写于 2020 年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发现代码">
+<meta name=author content>
+<link rel=preconnect href=https://cdn.jsdelivr.net>
+<link rel=preconnect href=https://fonts.googleapis.com>
+<link rel=preconnect href=https://fonts.gstatic.com crossorigin>
+<link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
+<link rel=stylesheet href="/bundle.css?v=1717977410" media=all>
+<link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
+<link rel=icon href=https://github.com/mayocream.png><meta name=generator content="Hugo 0.88.1">
+<link rel=canonical href=https://mayo.rocks/2020/12/hugo-source-code-reading/><meta property="og:title" content="Hugo 源码阅读">
+<meta property="og:description" content="这篇源码阅读编写于 2020 年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发现代码">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://mayo.rocks/2020/12/hugo-source-code-reading/"><meta property="article:section" content="posts">
+<meta property="article:published_time" content="2020-12-10T00:00:00+00:00">
+<meta property="article:modified_time" content="2020-12-10T00:00:00+00:00"><meta property="og:site_name" content="Mayo's Blog">
+</head>
+</html>
+<body><script src=https://cdn.jsdelivr.net/npm/darkmode-js@1.5.7/lib/darkmode-js.min.js></script>
+<script>const opts={bottom:'32px',right:'unset',left:'32px',time:'0.3s',mixColor:'#fff',backgroundColor:'#fff',buttonColorDark:'#100f2c',buttonColorLight:'#fff',saveInCookies:!0,label:'🌓',autoMatchOsTheme:!0};let darkmode;window.matchMedia('only screen and (min-width: 680px)').matches?(darkmode=new Darkmode(opts),darkmode.showWidget()):(localStorage.removeItem('darkmode'),darkmode=new Darkmode(opts)),window.darkmode=darkmode,document.addEventListener('DOMContentLoaded',function(){document.body.style.opacity=1})</script>
+<main class=page-content aria-label=Content>
+<div class=wrapper><nav class=site-nav>
+<a class=page-link href=/posts/>Posts</a>
+<a class=page-link href=/about/>About</a>
+</nav><header class=post-header>
+<a class=site-title href=https://mayo.rocks>Mayo's Blog</a>
+<h1 class="post-title baseline-fix typeface-sans" lang=zh itemprop="name headline">Hugo 源码阅读</h1>
+</header>
+<div class=post-cover aria-label=Cover>
+<div class=post-cover-wrapper>
+<img src alt>
+</div>
+<div class=cover-meta></div>
+</div>
+<div class=post-layout>
+<article class="post typeface-sans" lang=zh itemscope itemtype=http://schema.org/BlogPosting>
+<div class=post-content itemprop=articleBody>
+<p>这篇源码阅读编写于 2020 年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发现代码量巨大，而且内部实现逻辑较为复杂，在这里也只对部分逻辑进行了梳理（只是冰山一角）。</p>
+<h2 id=1-概述>1. 概述</h2>
+<p>我阅读并作出中文注释的 Commits 可以在这里看到：<br>
+<a href="https://github.com/mayocream/hugo/commits?author=mayocream">https://github.com/mayocream/hugo/commits?author=mayocream</a></p>
+<p>阅读源码的过程中也当 typofix 机器人提了 <a href=https://github.com/gohugoio/hugo/pull/8034>PR</a>，毕竟自己确实没有能贡献的地方。不过阅读源码并注释帮助理解，方便整理也是一个好习惯，在工作中我逐渐学会了。</p>
+<p>根据 <a href=https://en.wikipedia.org/wiki/Hugo_(software)>Wikipedia</a> 的记载，Hugo 早在 2013 年就发布了，直到去年我一直没有使用过，可能是它没有官方的中文文档，Go 语言对当时我也太生疏，而且 Hugo 的模板语法和 Hexo 与 Jekyll 也不一样，而且官方推荐用 Theme 的方式是 Git Submodule，相比于 Hexo 上手难度还是高一些。</p>
+<p>现在作为使用者来说，Hugo 使用的 Go 模板语法很好用，Hugo 基于模板的 Pipeline 实现的数据预处理也非常方便，用了就停不下来了。而且基于 <a href=https://github.com/evanw/esbuild>esbuild</a> 的打包使得静态资源的构建也很方便，终于脱离 Webpack 了。我还有一个弃坑的项目 <a href=https://github.com/mayocream/material-design-blog>material-design-blog</a> 也是使用的 Snowpack (esbuild) 进行静态资源的打包，不知道都已经是 2021 年末了，为什么公司的那群人还要使用 Webpack 缓慢地构建呢。</p>
+<p>Hugo 现在基本上 Github 上开源项目文档发布的标配，不过 Cloudflare 的开发者文档是使用 <a href=https://www.gatsbyjs.com/>Gatsby</a> 发布的，可能 Cloudflare 内部 JavaScript 用得也多吧，Worker 对于 Go 就<a href=https://community.cloudflare.com/t/native-golang-support-for-workers/65896>没有原生支持</a>。</p>
+<p>在使用过程中我还是尽量克制自己使用 Hugo <a href=https://gohugo.io/content-management/shortcodes/>Shortcodes</a>，一个 Markdown 文档应该保持纯净，除了 Markdown 扩展语法以外都不要使用，需要特殊实现的也使用原生 HTML 标签，这样方便将写作和 Blog 发布分离。</p>
+<p>我自己用在 <a href=https://github.com/mayocream/Translations>Translations</a> 项目中的 Hugo 的 Shortcode 是：</p>
+<pre><code class=language-html>&lt;figure class=&quot;manga&quot;&gt;
+    &lt;img src=&quot;https://cdn.jsdelivr.net/gh/mayocream/Translations@gh-pages/raw/{{ .Get &quot;src&quot; }}&quot; alt=&quot;&quot; loading=&quot;lazy&quot;&gt;
+    &lt;figcaption&gt;{{ .Get &quot;alt&quot; }}&lt;/figcaption&gt;
+&lt;/figure&gt;
+</code></pre>
+<p>为了利用上 Figure 标签与 jsDelivr 的 CDN，使用了 Shortcode，不过该项目中采用 Hugo 是专门为了进行发布管理的，关于这个如果我还有时间做更多翻译的话，可能会写一篇文章来介绍翻译小工程的工作流 🤹。</p>
+<h3 id=11-目录结构>1.1. 目录结构</h3>
+<p>Hugo 的开发时间较早，所以目录结构较为分散，与 <a href=https://github.com/golang-standards/project-layout>Standard Go Project Layout</a> 差异较大，当然这个社区提出的目录规范建议，也存在着争议，不过 Google 的不少项目都是遵循这个规范的，例如 <a href=https://github.com/kubernetes/kubernetes>Kubernetes</a> 和 <a href=https://github.com/grpc/grpc-go>grpc-go</a>。</p>
+<pre><code class=language-bash>$ tree -L 1 -d
+.
+├── commands   // CLI 入口, 解析 flags
+├── common     // 工具类
+├── hugofs     // FS 封装, 基于 afero/fs
+├── hugolib    // 程序主逻辑
+├── lazy       // 懒加载工具包
+├── livereload // Live 预览, 基于 Service Worker
+├── markup     // Markdown 解析相关
+├── parser     // 解析文件头
+...
+
+40 directories
+</code></pre>
+<h2 id=2-程序流程>2. 程序流程</h2>
+<h3 id=21-流程定义>2.1. 流程定义</h3>
+<h4 id=211-错误状态码>2.1.1. 错误状态码</h4>
+<pre><code class=language-go>func main() {
+	resp := commands.Execute(os.Args[1:])
+
+	if resp.Err != nil {
+		if resp.IsUserError() {
+			resp.Cmd.Println(&quot;&quot;)
+			resp.Cmd.Println(resp.Cmd.UsageString())
+		}
+		os.Exit(-1)
+	}
+}
+</code></pre>
+<p><code>os.Exit(-1)</code> 程序的退出状态码不在 0~255 之间，会自动做转换，转换的规则如下<sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup>：</p>
+<ul>
+<li>当指定的退出时状态码为负数:</li>
+</ul>
+<pre><code class=language-fallback>256 - (|code| % 256)
+</code></pre>
+<ul>
+<li>当指定的退出时状态码为正数:</li>
+</ul>
+<pre><code class=language-fallback>code % 256
+</code></pre>
+<p>由此程序退出的状态码为 255。</p>
+<h4 id=212-cli-命令>2.1.2. CLI 命令</h4>
+<pre><code class=language-go>// commands/commands.go
+func (b *commandsBuilder) addAll() *commandsBuilder {
+   b.addCommands(
+      b.newServerCmd(),
+      newVersionCmd(),
+      newEnvCmd(),
+      b.newConfigCmd(),
+      newCheckCmd(),
+      b.newDeployCmd(),
+      b.newConvertCmd(),
+      b.newNewCmd(),
+      b.newListCmd(),
+      newImportCmd(),
+      newGenCmd(),
+      createReleaser(),
+      b.newModCmd(),
+   )
+
+   return b
+}
+</code></pre>
+<p>所有的 cmd handler 继承自 basecmd，实现了 cmder 接口：</p>
+<pre><code class=language-go>// commands/helpers.go
+type cmder interface {
+	flagsToConfig(cfg config.Provider)
+	getCommand() *cobra.Command
+}
+</code></pre>
+<p>
+<figure class=image>
+<img src=/2020/12/hugo-source-code-reading/images/hugo-impl.png alt loading=lazy>
+</figure></p>
+<pre><code class=language-go>// commands/commands.go
+func (b *commandsBuilder) addAll() *commandsBuilder {
+	b.addCommands(
+		b.newServerCmd(),
+		newVersionCmd(),
+		newEnvCmd(),
+		b.newConfigCmd(),
+		newCheckCmd(),
+		b.newDeployCmd(),
+		b.newConvertCmd(),
+		b.newNewCmd(),
+		b.newListCmd(),
+		newImportCmd(),
+		newGenCmd(),
+		createReleaser(),
+		b.newModCmd(),
+	)
+
+	return b
+}
+
+func (b *commandsBuilder) build() *hugoCmd {
+	// 添加主 hugo 命令
+	h := b.newHugoCmd()
+	// 将命令数组添加进 cobra 的 Root Command 中, 作为子命令
+	addCommands(h.getCommand(), b.commands...)
+	return h
+}
+</code></pre>
+<h3 id=22-渲染初始化>2.2. 渲染初始化</h3>
+<blockquote>
+<p>执行 Hugo 命令时进行的初始化加载</p>
+</blockquote>
+<pre><code class=language-go>// 创建 hugoCmd 封装块
+func (b *commandsBuilder) newHugoCmd() *hugoCmd {
+	cc := &amp;hugoCmd{}
+
+	cc.baseBuilderCmd = b.newBuilderCmd(&amp;cobra.Command{
+		Use:   &quot;hugo&quot;,
+		Short: &quot;hugo builds your site&quot;,
+		Long: `hugo is the main command, used to build your Hugo site.
+
+Hugo is a Fast and Flexible Static Site Generator
+built with love by spf13 and friends in Go.
+
+Complete documentation is available at http://gohugo.io/.`,
+
+		// 执行渲染操作
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// 记录全局操作耗时
+			defer cc.timeTrack(time.Now(), &quot;Total&quot;)
+			cfgInit := func(c *commandeer) error {
+				if cc.buildWatch {
+					// 如果开启了 watch 模式则关闭动态重载
+					c.Set(&quot;disableLiveReload&quot;, true)
+				}
+				return nil
+			}
+
+			// 初始化配置
+			c, err := initializeConfig(true, cc.buildWatch, &amp;cc.hugoBuilderCommon, cc, cfgInit)
+			if err != nil {
+				return err
+			}
+			cc.c = c
+
+			// 编译操作
+			return c.build()
+		},
+	})
+   
+    ...
+</code></pre>
+<h4 id=221-配置文件加载>2.2.1. 配置文件加载</h4>
+<pre><code class=language-go>// hugolib/config.go
+
+	for _, configDir := range configDirs {
+		err := afero.Walk(sourceFs, configDir, func(path string, fi os.FileInfo, err error) error {
+			if fi == nil || err != nil {
+				return nil
+			}
+
+			if fi.IsDir() {
+				dirnames = append(dirnames, path)
+				return nil
+			}
+
+			// 检查文件后缀是否是支持的格式
+			if !config.IsValidConfigFilename(path) {
+				return nil
+			}
+
+			// 文件名, 移除文件后缀
+			name := helpers.Filename(filepath.Base(path))
+
+			// 加载文件内容到 map
+			item, err := metadecoders.Default.UnmarshalFileToMap(sourceFs, path)
+			if err != nil {
+				return l.wrapFileError(err, path)
+			}
+
+			var keyPath []string
+
+			// 如果不是 hugo 的 config 文件
+			if name != &quot;config&quot; {
+				// Can be params.jp, menus.en etc.
+				// 如果文件还有后缀, 可能是语言后缀
+				name, lang := helpers.FileAndExtNoDelimiter(name)
+
+				keyPath = []string{name}
+
+				// 如果语言后缀存在
+				if lang != &quot;&quot; {
+					// 填充语言文件夹路径
+					keyPath = []string{&quot;languages&quot;, lang}
+					switch name {
+					case &quot;menu&quot;, &quot;menus&quot;:
+						keyPath = append(keyPath, &quot;menus&quot;)
+					case &quot;params&quot;:
+						keyPath = append(keyPath, &quot;params&quot;)
+					}
+				}
+			}
+
+			root := item
+			if len(keyPath) &gt; 0 {
+				root = make(map[string]interface{})
+				m := root
+
+				// 遍历形成层级关系
+
+				// 遍历语言文件夹的路径
+				// i 从 0 开始
+				for i, key := range keyPath {
+					// 如果 i &gt;= 最后一个元素的 index
+					if i &gt;= len(keyPath)-1 {
+						// 将文件内容填充到 key 下面
+						m[key] = item
+					} else {
+						nm := make(map[string]interface{})
+						m[key] = nm
+						m = nm
+					}
+				}
+			}
+
+			// Migrate menu =&gt; menus etc.
+			config.RenameKeys(root)
+
+			// 合并配置文件
+			if err := v.MergeConfigMap(root); err != nil {
+				return l.wrapFileError(err, path)
+			}
+
+			return nil
+		})
+</code></pre>
+<p>遍历配置文件夹、以及加载配置文件（yaml/toml/json 后缀）到 Map 中，使用 Viper 的 <code>MergeConfigMap</code> 载入配置，包含语言、菜单配置。</p>
+<pre><code class=language-go>// hugolib/hugo_sites.go
+// 创建 sites 的配置
+func createSitesFromConfig(cfg deps.DepsCfg) ([]*Site, error) {
+	var sites []*Site
+
+	// 获取多语言配置
+	languages := getLanguages(cfg.Cfg)
+
+	for _, lang := range languages {
+		if lang.Disabled {
+			continue
+		}
+		var s *Site
+		var err error
+		cfg.Language = lang
+		// 为每个语言创建一个 site
+		s, err = newSite(cfg)
+
+		if err != nil {
+			return nil, err
+		}
+
+		sites = append(sites, s)
+	}
+
+	return sites, nil
+}
+</code></pre>
+<p>为每个语言生成一个 Site。</p>
+<h4 id=222-内容加载>2.2.2. 内容加载</h4>
+<p>注册回调函数:</p>
+<pre><code class=language-go>// hugolib/site.go
+// 初始化
+func (s *Site) prepareInits() {
+	s.init = &amp;siteInit{}
+
+	var init lazy.Init
+
+	// 回调函数
+	s.init.prevNext = init.Branch(func() (interface{}, error) {
+		// 获取 pages
+		regularPages := s.RegularPages()
+		for i, p := range regularPages {
+			np, ok := p.(nextPrevProvider)
+			if !ok {
+				continue
+			}
+
+			pos := np.getNextPrev()
+			if pos == nil {
+				continue
+			}
+
+			pos.nextPage = nil
+			pos.prevPage = nil
+
+			if i &gt; 0 {
+				pos.nextPage = regularPages[i-1]
+			}
+
+			if i &lt; len(regularPages)-1 {
+				pos.prevPage = regularPages[i+1]
+			}
+		}
+		return nil, nil
+	})
+
+	s.init.prevNextInSection = init.Branch(func() (interface{}, error) {
+		var sections page.Pages
+		s.home.treeRef.m.collectSectionsRecursiveIncludingSelf(pageMapQuery{Prefix: s.home.treeRef.key}, func(n *contentNode) {
+			sections = append(sections, n.p)
+		})
+
+		setNextPrev := func(pas page.Pages) {
+			for i, p := range pas {
+				np, ok := p.(nextPrevInSectionProvider)
+				if !ok {
+					continue
+				}
+
+				pos := np.getNextPrevInSection()
+				if pos == nil {
+					continue
+				}
+
+				pos.nextPage = nil
+				pos.prevPage = nil
+
+				if i &gt; 0 {
+					pos.nextPage = pas[i-1]
+				}
+
+				if i &lt; len(pas)-1 {
+					pos.prevPage = pas[i+1]
+				}
+			}
+		}
+
+		for _, sect := range sections {
+			treeRef := sect.(treeRefProvider).getTreeRef()
+
+			var pas page.Pages
+			treeRef.m.collectPages(pageMapQuery{Prefix: treeRef.key + cmBranchSeparator}, func(c *contentNode) {
+				pas = append(pas, c.p)
+			})
+			page.SortByDefault(pas)
+
+			setNextPrev(pas)
+		}
+
+		// The root section only goes one level down.
+		treeRef := s.home.getTreeRef()
+
+		var pas page.Pages
+		treeRef.m.collectPages(pageMapQuery{Prefix: treeRef.key + cmBranchSeparator}, func(c *contentNode) {
+			pas = append(pas, c.p)
+		})
+		page.SortByDefault(pas)
+
+		setNextPrev(pas)
+
+		return nil, nil
+	})
+
+	s.init.menus = init.Branch(func() (interface{}, error) {
+		s.assembleMenus()
+		return nil, nil
+	})
+
+	s.init.taxonomies = init.Branch(func() (interface{}, error) {
+		err := s.pageMap.assembleTaxonomies()
+		return nil, err
+	})
+}
+</code></pre>
+<h2 id=3-性能优化细节>3. 性能优化细节</h2>
+<h3 id=31-interface-实现约束>3.1. interface 实现约束</h3>
+<p>代码中有多处使用如下方式在编译时约束 interface 被实现。</p>
+<pre><code class=language-go>var _ cmder = (*newCmd)(nil)
+</code></pre>
+<p>其他开源项目中有也有这种写法的：</p>
+<pre><code class=language-go>var _ cmder = &amp;newCmd{}
+var _ cmder = newCmd{}
+</code></pre>
+<h3 id=32-防抖>3.2. 防抖</h3>
+<pre><code class=language-go>package debounce
+
+import (
+	&quot;sync&quot;
+	&quot;time&quot;
+)
+
+// New returns a debounced function that takes another functions as its argument.
+// This function will be called when the debounced function stops being called
+// for the given duration.
+// The debounced function can be invoked with different functions, if needed,
+// the last one will win.
+func New(after time.Duration) func(f func()) {
+	d := &amp;debouncer{after: after}
+
+	return func(f func()) {
+		d.add(f)
+	}
+}
+
+type debouncer struct {
+	mu    sync.Mutex
+	after time.Duration
+	timer *time.Timer
+}
+
+func (d *debouncer) add(f func()) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+    // 如果正在延时中，取消当前延时，添加新的延时
+	if d.timer != nil {
+		d.timer.Stop()
+	}
+	d.timer = time.AfterFunc(d.after, f)
+}
+</code></pre>
+<p>防抖函数的使用类似 React Hooks。</p>
+<pre><code class=language-go>f := func()
+run := debounce.New(f)
+run()
+</code></pre>
+<p>在 Istio 源码中，处理 XDS 推流时也会进行防抖处理。</p>
+<h3 id=32-lifo-队列>3.2. LIFO 队列</h3>
+<pre><code class=language-go>// LIFO 队列，溢出的元素会从顶部移除
+// 没有主动删除元素的方法
+// EvictingStringQueue is a queue which automatically evicts elements from the head of
+// the queue when attempting to add new elements onto the queue and it is full.
+// This queue orders elements LIFO (last-in-first-out). It throws away duplicates.
+// Note: This queue currently does not contain any remove (poll etc.) methods.
+type EvictingStringQueue struct {
+	size int
+	vals []string // 储存真实的数据
+	set  map[string]bool // 表示是否已经存在
+	mu   sync.Mutex
+}
+
+// NewEvictingStringQueue creates a new queue with the given size.
+func NewEvictingStringQueue(size int) *EvictingStringQueue {
+	return &amp;EvictingStringQueue{size: size, set: make(map[string]bool)}
+}
+
+// Add adds a new string to the tail of the queue if it's not already there.
+func (q *EvictingStringQueue) Add(v string) {
+	q.mu.Lock()
+	// 已经存在
+	if q.set[v] {
+		q.mu.Unlock()
+		return
+	}
+
+	// 数量达到最大限制
+	if len(q.set) == q.size {
+		// Full
+		// 移除了 0 号元素的占位符
+		delete(q.set, q.vals[0])
+		// :0 取空数组，1:取不包含第一个元素的其余元素
+		// 移除了数组 0 号元素
+		q.vals = append(q.vals[:0], q.vals[1:]...)
+	}
+	// 表示存在
+	q.set[v] = true
+	// 最新插入的值在数组最后
+	// 是队列结构
+	q.vals = append(q.vals, v)
+	q.mu.Unlock()
+}
+
+// Contains returns whether the queue contains v.
+func (q *EvictingStringQueue) Contains(v string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.set[v]
+}
+
+// Peek looks at the last element added to the queue.
+func (q *EvictingStringQueue) Peek() string {
+	q.mu.Lock()
+	l := len(q.vals)
+	// 处理边界条件
+	if l == 0 {
+		q.mu.Unlock()
+		return &quot;&quot;
+	}
+	// 取最后一个元素
+	elem := q.vals[l-1]
+	q.mu.Unlock()
+	return elem
+}
+
+// PeekAll looks at all the elements in the queue, with the newest first.
+func (q *EvictingStringQueue) PeekAll() []string {
+	q.mu.Lock()
+	vals := make([]string, len(q.vals))
+	copy(vals, q.vals)
+	q.mu.Unlock()
+	// i 从头开始循环 j 从尾循环
+	// 交换 i j 元素位置
+	// 数组 reverse
+	// 最后插入的在最前面
+	for i, j := 0, len(vals)-1; i &lt; j; i, j = i+1, j-1 {
+		vals[i], vals[j] = vals[j], vals[i]
+	}
+	return vals
+}
+
+// PeekAllSet returns PeekAll as a set.
+func (q *EvictingStringQueue) PeekAllSet() map[string]bool {
+	all := q.PeekAll()
+	set := make(map[string]bool)
+	for _, v := range all {
+		set[v] = true
+	}
+
+	return set
+}
+</code></pre>
+<h3 id=33-同步信号量>3.3. 同步信号量</h3>
+<p><code>golang.org/x/sync/semaphore</code> 扩展同步原语。</p>
+<h3 id=34-command>3.4. Command</h3>
+<h4 id=341-cli-自动补全>3.4.1. CLI 自动补全</h4>
+<p>
+<figure class=image>
+<img src=/2020/12/hugo-source-code-reading/images/hugo-cli.png alt loading=lazy>
+</figure></p>
+<p>Hugo 的使用方式有两种：</p>
+<pre><code class=language-go>// &quot;-config&quot; flag 自动补全指定后缀文件名
+_ = cc.cmd.PersistentFlags().SetAnnotation(&quot;config&quot;, cobra.BashCompFilenameExt, config.ValidConfigFileExtensions)
+
+// &quot;-source&quot; flag 自动补全子文件夹名
+cmd.PersistentFlags().SetAnnotation(&quot;source&quot;, cobra.BashCompSubdirsInDir, []string{})
+</code></pre>
+<h3 id=35-并发控制>3.5. 并发控制</h3>
+<h4 id=351-缓冲通道控制并发>3.5.1. 缓冲通道控制并发</h4>
+<pre><code class=language-go>// common/para/para.go
+// Package para implements parallel execution helpers.
+package para
+
+import (
+	&quot;context&quot;
+
+	&quot;golang.org/x/sync/errgroup&quot;
+)
+
+// Workers configures a task executor with the most number of tasks to be executed in parallel.
+type Workers struct {
+	sem chan struct{}
+}
+
+// Runner wraps the lifecycle methods of a new task set.
+//
+// Run wil block until a worker is available or the context is cancelled,
+// and then run the given func in a new goroutine.
+// Wait will wait for all the running goroutines to finish.
+type Runner interface {
+	Run(func() error)
+	Wait() error
+}
+
+type errGroupRunner struct {
+	*errgroup.Group
+	w   *Workers
+	ctx context.Context
+}
+
+func (g *errGroupRunner) Run(fn func() error) {
+	select {
+	// 分配一个信号, 如果 chan 被关闭则退出
+	case g.w.sem &lt;- struct{}{}:
+	case &lt;-g.ctx.Done():
+		return
+	}
+
+	g.Go(func() error {
+		err := fn()
+		// 执行完后消费信号量, 通过缓存通道保证并发执行的协程数量
+		&lt;-g.w.sem
+		return err
+	})
+}
+
+// New creates a new Workers with the given number of workers.
+func New(numWorkers int) *Workers {
+	return &amp;Workers{
+		// 缓冲通道, 并发写入
+		sem: make(chan struct{}, numWorkers),
+	}
+}
+
+// Start starts a new Runner.
+func (w *Workers) Start(ctx context.Context) (Runner, context.Context) {
+	g, ctx := errgroup.WithContext(ctx)
+	return &amp;errGroupRunner{
+		Group: g,
+		ctx:   ctx,
+		w:     w,
+	}, ctx
+}
+
+</code></pre>
+<p>Playground 测试示例: <a href=https://play.golang.org/p/4AJtyVnlSOd>https://play.golang.org/p/4AJtyVnlSOd</a></p>
+<pre><code class=language-go>func main() {
+	w := para.New(10)
+	runner, _ := w.Start(context.TODO())
+	runner.Run(func() error {
+		fmt.Println(&quot;fucking&quot;)
+		return nil
+	})
+	time.Sleep(2 * time.Second)
+}
+</code></pre>
+<h3 id=36-懒加载>3.6. 懒加载</h3>
+<blockquote>
+<p>Lazy 包</p>
+</blockquote>
+<h4 id=361-oncemore>3.6.1. onceMore</h4>
+<pre><code class=language-go>package lazy
+
+import (
+	&quot;sync&quot;
+	&quot;sync/atomic&quot;
+)
+
+// onceMore is similar to sync.Once.
+//
+// Additional features are:
+// * it can be reset, so the action can be repeated if needed
+// * it has methods to check if it's done or in progress
+//
+type onceMore struct {
+	mu   sync.Mutex
+	lock uint32
+	done uint32
+}
+
+func (t *onceMore) Do(f func()) {
+	if atomic.LoadUint32(&amp;t.done) == 1 {
+		return
+	}
+
+	// f may call this Do and we would get a deadlock.
+	locked := atomic.CompareAndSwapUint32(&amp;t.lock, 0, 1)
+	if !locked {
+		// 没有抢到原子操作
+		return
+	}
+	// 释放原子锁
+	// defer 是 FILO, 该原子锁会最后才释放
+	defer atomic.StoreUint32(&amp;t.lock, 0)
+
+	// 并发锁, 保证 t.done 值的读取不会产生竞争
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Double check
+	if t.done == 1 {
+		return
+	}
+	defer atomic.StoreUint32(&amp;t.done, 1)
+	f()
+}
+
+func (t *onceMore) InProgress() bool {
+	return atomic.LoadUint32(&amp;t.lock) == 1
+}
+
+func (t *onceMore) Done() bool {
+	return atomic.LoadUint32(&amp;t.done) == 1
+}
+
+func (t *onceMore) ResetWithLock() *sync.Mutex {
+	t.mu.Lock()
+	defer atomic.StoreUint32(&amp;t.done, 0)
+	return &amp;t.mu
+}
+
+</code></pre>
+<h4 id=362-init>3.6.2. init</h4>
+<pre><code class=language-go>package lazy
+
+import (
+	&quot;context&quot;
+	&quot;sync&quot;
+	&quot;time&quot;
+
+	&quot;github.com/pkg/errors&quot;
+)
+
+// New creates a new empty Init.
+func New() *Init {
+	return &amp;Init{}
+}
+
+// Init holds a graph of lazily initialized dependencies.
+type Init struct {
+	mu sync.Mutex // 并发修改图的锁
+
+	prev     *Init
+	children []*Init
+
+	init onceMore // 保证只执行一次的锁
+	out  interface{} // 执行结果
+	err  error // 执行错误
+	f    func() (interface{}, error) // 回调函数
+}
+
+// Add adds a func as a new child dependency.
+func (ini *Init) Add(initFn func() (interface{}, error)) *Init {
+	if ini == nil {
+		ini = New()
+	}
+	return ini.add(false, initFn)
+}
+
+// AddWithTimeout is same as Add, but with a timeout that aborts initialization.
+func (ini *Init) AddWithTimeout(timeout time.Duration, f func(ctx context.Context) (interface{}, error)) *Init {
+	return ini.Add(func() (interface{}, error) {
+		return ini.withTimeout(timeout, f)
+	})
+}
+
+// Branch creates a new dependency branch based on an existing and adds
+// the given dependency as a child.
+func (ini *Init) Branch(initFn func() (interface{}, error)) *Init {
+	if ini == nil {
+		ini = New()
+	}
+	return ini.add(true, initFn)
+}
+
+// BranchdWithTimeout is same as Branch, but with a timeout.
+func (ini *Init) BranchWithTimeout(timeout time.Duration, f func(ctx context.Context) (interface{}, error)) *Init {
+	return ini.Branch(func() (interface{}, error) {
+		return ini.withTimeout(timeout, f)
+	})
+}
+
+// Do initializes the entire dependency graph.
+func (ini *Init) Do() (interface{}, error) {
+	if ini == nil {
+		panic(&quot;init is nil&quot;)
+	}
+
+	// 调用 onceMore 库保证只执行一次
+	ini.init.Do(func() {
+		// 获取父节点
+		prev := ini.prev
+		if prev != nil {
+			// A branch. Initialize the ancestors.
+			// 若父节点还没有完成初始化, 并且没有正在执行的回调函数, 执行
+			if prev.shouldInitialize() {
+				_, err := prev.Do()
+				if err != nil {
+					ini.err = err
+					return
+				}
+			} else if prev.inProgress() {
+				// Concurrent initialization. The following init func
+				// may depend on earlier state, so wait.
+				// 等待一定时间, 若没有执行完, panic
+				prev.wait()
+			}
+		}
+
+		// 执行回调函数
+		if ini.f != nil {
+			ini.out, ini.err = ini.f()
+		}
+
+		// 循环执行子节点的回调函数
+		// 为什么不并发执行 ?
+		for _, child := range ini.children {
+			if child.shouldInitialize() {
+				_, err := child.Do()
+				if err != nil {
+					ini.err = err
+					return
+				}
+			}
+		}
+	})
+
+	ini.wait()
+
+	return ini.out, ini.err
+}
+
+// TODO(bep) investigate if we can use sync.Cond for this.
+func (ini *Init) wait() {
+	var counter time.Duration
+	for !ini.init.Done() {
+		counter += 10
+		if counter &gt; 600000000 {
+			panic(&quot;BUG: timed out in lazy init&quot;)
+		}
+		time.Sleep(counter * time.Microsecond)
+	}
+}
+
+func (ini *Init) inProgress() bool {
+	return ini != nil &amp;&amp; ini.init.InProgress()
+}
+
+// 若 没有注册了回调函数 | 已经完成 | 正在执行, 不进行初始化
+func (ini *Init) shouldInitialize() bool {
+	return !(ini == nil || ini.init.Done() || ini.init.InProgress())
+}
+
+// Reset resets the current and all its dependencies.
+func (ini *Init) Reset() {
+	mu := ini.init.ResetWithLock()
+	defer mu.Unlock()
+	for _, d := range ini.children {
+		d.Reset()
+	}
+}
+
+// 添加图的节点
+func (ini *Init) add(branch bool, initFn func() (interface{}, error)) *Init {
+	ini.mu.Lock()
+	defer ini.mu.Unlock()
+
+	// 如果是新建分支
+	if branch {
+		return &amp;Init{
+			f:    initFn,
+			prev: ini, // 父节点
+		}
+	}
+
+	// 如果是添加子节点
+	// 如果已经被执行, panic
+	ini.checkDone()
+	// 添加子节点
+	ini.children = append(ini.children, &amp;Init{
+		f: initFn,
+	})
+
+	// 释放锁
+	return ini
+}
+
+func (ini *Init) checkDone() {
+	if ini.init.Done() {
+		panic(&quot;init cannot be added to after it has run&quot;)
+	}
+}
+
+// callback 函数, 有超时时间
+func (ini *Init) withTimeout(timeout time.Duration, f func(ctx context.Context) (interface{}, error)) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	// 缓存通道, 防止阻塞
+	c := make(chan verr, 1)
+
+	go func() {
+		v, err := f(ctx)
+		select {
+		case &lt;-ctx.Done():
+			return
+		default:
+			c &lt;- verr{v: v, err: err}
+		}
+	}()
+
+	select {
+	case &lt;-ctx.Done():
+		return nil, errors.New(&quot;timed out initializing value. You may have a circular loop in a shortcode, or your site may have resources that take longer to build than the `timeout` limit in your Hugo config file.&quot;)
+	case ve := &lt;-c:
+		return ve.v, ve.err
+	}
+}
+
+type verr struct {
+	v   interface{}
+	err error
+}
+
+</code></pre>
+<section class=footnotes role=doc-endnotes>
+<hr>
+<ol>
+<li id=fn:1 role=doc-endnote>
+<p><a href=https://imroc.io/posts/kubernetes/analysis-exitcode/>Kubernetes 问题定位技巧：分析 ExitCode - imroc.io|roc的博客|Cloud Native|Kubernetes|Go|Golang</a>&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+</ol>
+</section>
+</div>
+<footer class=post-footer>
+<div class=post-meta>
+<time datetime=" 2020-12-10" itemprop=datePublished>Dec 10, 2020</time>
+</div>
+</footer>
+</article>
+<script src=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.min.js></script>
+<aside class=typeface-sans lang=zh>
+<nav class=toc></nav>
+</aside>
+<script>tocbot.init({tocSelector:'.toc',contentSelector:'article',headingSelector:'h1, h2, h3, h4, h5',hasInnerContainers:!0,collapseDepth:"3",positionFixedSelector:".toc",headingsOffset:10})</script>
+</div><script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/prism.min.js></script>
+<script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/plugins/filter-highlight-all/prism-filter-highlight-all.min.js></script>
+<script src=https://cdn.jsdelivr.net/npm/prismjs@1.24.1/plugins/autoloader/prism-autoloader.min.js></script>
+<script>Prism.plugins.filterHighlightAll.add(function(a){return a.language!=="mermaid"})</script>
+<script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js></script>
+<script>mermaid.init({startOnLoad:!0},"pre code.language-mermaid",function(){const a=document.querySelectorAll('code.language-mermaid');for(const c of a){c.style.backgroundColor='initial';const b=c.parentNode;b.style.border='none',b.style.textAlign='center',window.darkmode&&!window.darkmode.isActivated()&&(b.style.backgroundColor='initial')}})</script>
+</div>
+</main><footer class=site-footer>
+<div class=wrapper>
+<div class=social-links>
+<a class="social-link social-github" href=https://github.com/mayocream><svg style="width:24px;height:24px" viewBox="0 0 24 24"><path fill="currentcolor" d="M12 2A10 10 0 002 12c0 4.42 2.87 8.17 6.84 9.5C9.34 21.58 9.5 21.27 9.5 21 9.5 20.77 9.5 20.14 9.5 19.31 6.73 19.91 6.14 17.97 6.14 17.97c-.46-1.16-1.11-1.47-1.11-1.47C4.12 15.88 5.1 15.9 5.1 15.9 6.1 15.97 6.63 16.93 6.63 16.93 7.5 18.45 8.97 18 9.54 17.76 9.63 17.11 9.89 16.67 10.17 16.42c-2.22-.25-4.55-1.11-4.55-4.92.0-1.11.38-2 1.03-2.71C6.55 8.54 6.2 7.5 6.75 6.15c0 0 .84-.27 2.75 1.02C10.29 6.95 11.15 6.84 12 6.84s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02C17.8 7.5 17.45 8.54 17.35 8.79 18 9.5 18.38 10.39 18.38 11.5c0 3.82-2.34 4.66-4.57 4.91C14.17 16.72 14.5 17.33 14.5 18.26c0 1.34.0 2.42.0 2.74.0.27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/></svg>
+</a>
+<a class="social-link social-rss" href=/index.xml target=_blank><svg style="width:24px;height:24px" viewBox="0 0 24 24"><path fill="currentcolor" d="M6.18 15.64a2.18 2.18.0 012.18 2.18C8.36 19 7.38 20 6.18 20 5 20 4 19 4 17.82a2.18 2.18.0 012.18-2.18M4 4.44A15.56 15.56.0 0119.56 20H16.73A12.73 12.73.0 004 7.27V4.44M4 10.1A9.9 9.9.0 0113.9 20H11.07A7.07 7.07.0 004 12.93V10.1z"/></svg>
+</a>
+</div>
+<div class=credits>
+Theme KAGAMI by Kamikat
+</div>
+</div>
+</footer><script>(function(a){for(var a=Array.prototype.slice.call(document.getElementsByClassName('baseline-fix')),b=0,c;b!=a.length;b++)c=a[b],c.innerHTML=c.innerHTML.replace(/[\u2000-\u206e⸀-\u2e7e⺀-\u2efe⼀-\u2fde⿰-\u2ffe\u3000-〾\u3040-ゞ゠-ヾ\u3100-\u312e\u3130-ㆎ㆐-㆞ㆠ-\u31be㇀-\u31eeㇰ-ㇾ㈀-㋾㌀-㏾㐀-\u4dbe一-\u9ffe\ua960-\ua97e가-\ud7ae\ud7b0-\ud7fe豈-\ufafe︰-﹎\uff00-￮]|[\ud840-\ud868\ud86a-\ud86c][\udc00-\udfff]|\ud82c[\udc00-\udcfe]|\ud869[\udc00-\udede\udf00-\udfff]|\ud86d[\udc00-\udf3e\udf40-\udfff]|\ud86e[\udc00-\udc1e]|\ud87e[\udc00-\ude1e]/g,function(a){return'<span class="baseline-fix-block">'+a+'<'+'/span>'}),c.classList.remove('baseline-fix')})(Array.prototype.slice.call(document.getElementsByClassName('baseline-fix')))</script>
+<script type=text/javascript>const resize=function(){this.width=.5*(this.naturalWidth||this.width)};Array.prototype.forEach.call(document.querySelectorAll('.half-size, .retina2x'),function(a){a.naturalWidth?resize.call(a):a.onload=resize})</script>
+<script src=https://cdn.jsdelivr.net/npm/twemoji@13.1.0/dist/twemoji.min.js></script>
+<script>twemoji.parse(document.body,{folder:'svg',ext:'.svg'})</script>
+</body>
