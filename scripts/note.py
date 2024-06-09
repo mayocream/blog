@@ -19,7 +19,7 @@ for entry in feed.entries:
 
     # Convert the date to ISO format
     parsed_date = datetime.strptime(date, '%a, %d %b %Y %H:%M:%S %z')
-    formatted_date = parsed_date.strftime('%Y-%m-%d')
+    formatted_date = parsed_date.strftime('%Y-%m-%d %H:%M')
 
     # Format title and content
     formatted_title = title.replace(" ", "-").lower()
