@@ -20,9 +20,9 @@ for entry in feed.entries:
     entry_url = entry.link
     date = entry.published
 
-    # Convert the date to ISO format
+    # Convert the date to ISO format with timezone
     parsed_date = datetime.strptime(date, '%a, %d %b %Y %H:%M:%S %z')
-    formatted_date = parsed_date.strftime('%Y-%m-%d')
+    formatted_date = parsed_date.isoformat()
 
     # Fetch the HTML content from the entry URL
     response = requests.get(entry_url)
@@ -49,7 +49,8 @@ typeface: serif
 
 > This is the content for the note titled "{title}" published on [{entry_url}]({entry_url}).
 
-{markdown_content}"""
+{markdown_content}
+"""
 
     # Save the formatted content to a file
     filename = f"./content/posts/note/{formatted_title}.md"
