@@ -13,10 +13,10 @@ date: "2021-09-21"
   const ctx = document.getElementById('year').getContext('2d')
   ctx.font = '32px serif'
   ctx.fillText(year, 0, 32)
-</script>  
+</script>
 
-Gamer.
+Bocchi.
 
-Email: [mayo@shoujo.io](mailto:mayo@shoujo.io)
+Email: [mayo@linux.com](mailto:mayo@linux.com)
 
 License: [Creative Commons Attribution 4.0 International License](http://creativecommons.org/licenses/by/4.0/)
