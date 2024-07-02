@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1719907581" media=all>
+<link rel=stylesheet href="/bundle.css?v=1719908117" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://github.com/mayocream.png><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://mayo.rocks/2021/10/%E5%9C%A8-kubernetes-%E9%9B%86%E7%BE%A4%E5%88%B6%E9%80%A0%E6%B7%B7%E6%B2%8C/><meta property="og:title" content="在 Kubernetes 集群制造混沌">
@@ -29,7 +29,7 @@
 <a class=page-link href=/about/>About</a>
 </nav><header class=post-header>
 <a class=site-title href=https://mayo.rocks>Mayo's Blog</a>
-<h1 class="post-title baseline-fix typeface-sans" lang=ja itemprop="name headline">在 Kubernetes 集群制造混沌</h1>
+<h1 class="post-title baseline-fix typeface-sans" lang=zh-hans itemprop="name headline">在 Kubernetes 集群制造混沌</h1>
 </header>
 <div class=post-cover aria-label=Cover>
 <div class=post-cover-wrapper>
@@ -38,7 +38,7 @@
 <div class=cover-meta></div>
 </div>
 <div class=post-layout>
-<article class="post typeface-sans" lang=ja itemscope itemtype=http://schema.org/BlogPosting>
+<article class="post typeface-sans" lang=zh-hans itemscope itemtype=http://schema.org/BlogPosting>
 <div class=post-content itemprop=articleBody>
 <p><em>Chaos Mesh 工作原理与控制平面开发</em></p>
 <p>Chaos Mesh 是由 TiDB 背后的 PingCAP 公司开发，运行在 Kubernetes 上的混沌工程（Chaos Engineering）系统。简而言之，Chaos Mesh 通过运行在 K8s 集群中的“特权”容器，依据 CRD 资源中的测试场景，在集群中制造浑沌（模拟故障）<sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup>。</p>
@@ -327,7 +327,7 @@ func Apply(netem *pb.Netem, pid uint32) error {
 <p>最终使用 <a href=https://github.com/vishvananda/netlink>vishvananda/netlink</a> 库操作 Linux 网络接口来完成工作。</p>
 <p>至于为什么没有详细说明使用了什么命令，进行了哪些操作，是因为我也不会。待我恶补完网络知识后再来回顾吧。不过这里能够知道，NetworkChaos 混沌类型，操作了Linux 宿主机网络来制造混沌，包含 iptables、ipset 等工具。</p>
 <p>在 Chaos Daemon 的 Dockerfile 中，可以看到其依赖的 Linux 工具链：</p>
-<pre><code class=language-dockerfile>RUN apt-get update &amp;&amp; \ 
+<pre><code class=language-dockerfile>RUN apt-get update &amp;&amp; \
     apt-get install -y tzdata iptables ipset stress-ng iproute2 fuse util-linux procps curl &amp;&amp; \
     rm -rf /var/lib/apt/lists/*
 </code></pre>
@@ -651,16 +651,16 @@ Spec:
       dev
 Status:
   Conditions:
-    Reason:  
+    Reason:
     Status:  False
     Type:    Paused
-    Reason:  
+    Reason:
     Status:  True
     Type:    Selected
-    Reason:  
+    Reason:
     Status:  True
     Type:    AllInjected
-    Reason:  
+    Reason:
     Status:  False
     Type:    AllRecovered
   Experiment:
@@ -782,7 +782,7 @@ func ListPodChaos(namespace string, labels map[string]string) ([]v1alpha1.PodCha
 </footer>
 </article>
 <script src=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.min.js></script>
-<aside class=typeface-sans lang=ja>
+<aside class=typeface-sans lang=zh-hans>
 <nav class=toc></nav>
 </aside>
 <script>tocbot.init({tocSelector:'.toc',contentSelector:'article',headingSelector:'h1, h2, h3, h4, h5',hasInnerContainers:!0,collapseDepth:"3",positionFixedSelector:".toc",headingsOffset:10})</script>

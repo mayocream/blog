@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1719907581" media=all>
+<link rel=stylesheet href="/bundle.css?v=1719908117" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://github.com/mayocream.png><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://mayo.rocks/2021/09/apisix-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/><meta property="og:title" content="APISIX 源码分析">
@@ -29,7 +29,7 @@
 <a class=page-link href=/about/>About</a>
 </nav><header class=post-header>
 <a class=site-title href=https://mayo.rocks>Mayo's Blog</a>
-<h1 class="post-title baseline-fix typeface-sans" lang=ja itemprop="name headline">APISIX 源码分析</h1>
+<h1 class="post-title baseline-fix typeface-sans" lang=zh-hans itemprop="name headline">APISIX 源码分析</h1>
 </header>
 <div class=post-cover aria-label=Cover>
 <div class=post-cover-wrapper>
@@ -38,7 +38,7 @@
 <div class=cover-meta></div>
 </div>
 <div class=post-layout>
-<article class="post typeface-sans" lang=ja itemscope itemtype=http://schema.org/BlogPosting>
+<article class="post typeface-sans" lang=zh-hans itemscope itemtype=http://schema.org/BlogPosting>
 <div class=post-content itemprop=articleBody>
 <p>本文基于 <a href=https://github.com/apache/apisix>APISIX</a> 2.6 版本进行源码分析，源码阅读注释仓库: <a href=https://github.com/mayocream/apisix/tree/review>review</a>，分析主要流程以及核心机制。</p>
 <p>在源码阅读过程中学习了涉及 OpenResty 的部分内容，包含 lua-resty-core（OpenResty 核心），以及 OpenResty 作者开源的 <code>lua-resty-*</code> 包，同时了解了 OpenResty 的测试框架 Test::Nginx。在源码阅读过程中给 APISIX 提了 2 个 PR（Code Style 以及 Build Script），知道了基本的 LuaJIT FFI 用法，该部分还在学习中。</p>
@@ -73,7 +73,7 @@
 	A --&gt; |Many| D
 	B --&gt; |Many| D
 	E(Consumers) --&gt; |Many| D
-	
+
 </code></pre>
 <p>比较有意思的是我翻到 APISIX 的一个 issue 中，项目开发者说不确定是什么原因，我们看看同行怎么做的吧。</p>
 <blockquote>
@@ -446,7 +446,7 @@ end
 <p>The privileged agent process does not listen on any virtual server ports like those worker processes. And it uses the same system account as the nginx master process, which is usually a privileged account like <code>root</code>.</p>
 <p>The <code>init_worker_by_lua*</code> directive handler still runs in the privileged agent process. And one can use the <a href=https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/process.md#type>type</a> function provided by this module to check if the current process is a privileged agent.<sup id=fnref:6><a href=#fn:6 class=footnote-ref role=doc-noteref>6</a></sup></p>
 </blockquote>
-<pre><code class=language-lua>-- worker 默认后台运行的 timer, 执行各种后台任务 
+<pre><code class=language-lua>-- worker 默认后台运行的 timer, 执行各种后台任务
 local function background_timer()
     if core.table.nkeys(timers) == 0 then
         return
@@ -758,7 +758,7 @@ end
         for _, item in ipairs(dir_res.nodes) do
             local key = short_key(self, item.key)
             local data_valid = true
-            
+
             -- 数据格式校验...
 
             -- schema 校验...
@@ -798,7 +798,7 @@ end
 		D --&gt; F
 		E --&gt; F
 	end
-	
+
 </code></pre>
 <pre><code class=language-lua>-- 定时器自动同步 etcd 数据
 local function _automatic_fetch(premature, self)
@@ -1029,7 +1029,7 @@ end
     local uri_routes = {}
     local uri_router
     local match_opts = {}
-    
+
     function _M.match(api_ctx)
         -- 从 module 的 user_routes 属性获取路由, 在 etcd route 变化时回调添加
         local user_routes = _M.user_routes
@@ -1438,7 +1438,7 @@ function _M.http_access_phase()
     -- 将 table 储存在 ngx.ctx 中, 下一个阶段共享
     ngx_ctx.api_ctx = api_ctx
 
-    -- 绑定 metatable 
+    -- 绑定 metatable
     core.ctx.set_vars_meta(api_ctx)
 	...
 
@@ -1636,7 +1636,7 @@ local wasmedge = ffi.load(&quot;libwasmedge.so&quot;)
 
     const char *WasmEdge_VersionGet();
     void WasmEdge_LogSetDebugLevel();
-    
+
     WasmEdge_Result WasmEdge_VMRunWasmFromFile(
         WasmEdge_VMContext *Cxt, const char *Path, const WasmEdge_String FuncName,
         const WasmEdge_Value *Params, const uint32_t ParamLen,
@@ -1658,7 +1658,7 @@ local vmconf = wasmedge.WasmEdge_ConfigureCreate()
 -- 创建 VM, 第二个参数是 Store, 我们默认传 null
 local vmctx = wasmedge.WasmEdge_VMCreate(vmconf, ffi.NULL)
 -- 执行 wasm
-local result = wasmedge.WasmEdge_VMRunWasmFromFile(vmctx, test_wasm_add_path, 
+local result = wasmedge.WasmEdge_VMRunWasmFromFile(vmctx, test_wasm_add_path,
         wasmedge.WasmEdge_StringCreateByCString(&quot;add&quot;), nil,
         0, nil, 0)
 </code></pre>
@@ -1761,7 +1761,7 @@ require (
 </footer>
 </article>
 <script src=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.min.js></script>
-<aside class=typeface-sans lang=ja>
+<aside class=typeface-sans lang=zh-hans>
 <nav class=toc></nav>
 </aside>
 <script>tocbot.init({tocSelector:'.toc',contentSelector:'article',headingSelector:'h1, h2, h3, h4, h5',hasInnerContainers:!0,collapseDepth:"3",positionFixedSelector:".toc",headingsOffset:10})</script>

@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1719907581" media=all>
+<link rel=stylesheet href="/bundle.css?v=1719908117" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://github.com/mayocream.png><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://mayo.rocks/2021/09/k8s-%E9%9B%86%E7%BE%A4%E8%B0%83%E5%BA%A6-wasm-%E5%AE%9E%E9%AA%8C/><meta property="og:title" content="K8s 集群调度 WASM 实验">
@@ -29,7 +29,7 @@
 <a class=page-link href=/about/>About</a>
 </nav><header class=post-header>
 <a class=site-title href=https://mayo.rocks>Mayo's Blog</a>
-<h1 class="post-title baseline-fix typeface-sans" lang=ja itemprop="name headline">K8s 集群调度 WASM 实验</h1>
+<h1 class="post-title baseline-fix typeface-sans" lang=zh-hans itemprop="name headline">K8s 集群调度 WASM 实验</h1>
 </header>
 <div class=post-cover aria-label=Cover>
 <div class=post-cover-wrapper>
@@ -38,7 +38,7 @@
 <div class=cover-meta></div>
 </div>
 <div class=post-layout>
-<article class="post typeface-sans" lang=ja itemscope itemtype=http://schema.org/BlogPosting>
+<article class="post typeface-sans" lang=zh-hans itemscope itemtype=http://schema.org/BlogPosting>
 <div class=post-content itemprop=articleBody>
 <p>Webassembly（WASM）是 Next-Generation 的软件分发方式，具有跨语言、跨平台、自带运行时的无敌属性<sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup>。知晓了它的美妙之处，我们自然会想拥有次世代的体验，本文描述尝试将轻量级 WASM 用类 OCI 打包方式调度到 K8s 集群中运行的过程，以及其中的艰辛之处。</p>
 <p>WASM 在当前阶段还很尴尬，WASI（WebAssembly System Interface）还处于<a href=https://github.com/WebAssembly/WASI/milestone/1>早期阶段</a>，WASM 运行时项目 <a href=https://github.com/wasmerio/wasmer>Wasmer</a> 与 <a href=https://github.com/bytecodealliance/wasmtime>wasmtime</a> 对于多语言的支持还不足，云厂商例如 Cloudflare 与 AWS Lambda@Edge 都不是原生支持 WASM，WASM 的执行性能也可能比不上 Google 的 v8 JavaScript 引擎。</p>
@@ -162,11 +162,11 @@ Allocatable:
   memory:             4032800Ki
   pods:               110
 System Info:
-  Machine ID:                 
-  System UUID:                
-  Boot ID:                    
-  Kernel Version:             
-  OS Image:                   
+  Machine ID:
+  System UUID:
+  Boot ID:
+  Kernel Version:
+  OS Image:
   Operating System:           linux
   Architecture:               wasm-wasi
   Container Runtime Version:  mvp
@@ -235,8 +235,8 @@ wasm-to-oci push hello.wasm harbor.domain.dev/bifrost/hello-wasm:v1
 <p>Docker 需要有 Registry 的凭证 <code>~/.docker/config.json</code></p>
 </blockquote>
 <p>Push 输出：</p>
-<pre><code class=language-bash>INFO[0001] Pushed: harbor.domain.dev/bifrost/hello-wasm:v1 
-INFO[0001] Size: 1624962                                
+<pre><code class=language-bash>INFO[0001] Pushed: harbor.domain.dev/bifrost/hello-wasm:v1
+INFO[0001] Size: 1624962
 INFO[0001] Digest: sha256:a01f32cc647abe49bb34727cc2c520e6e304e3049d669f53e2d30d49ee2ed9c7
 </code></pre>
 <p>wasm-oci 使用了自定义的 OCI Layer，属于非标准类型。</p>
@@ -262,7 +262,7 @@ INFO[0001] Digest: sha256:a01f32cc647abe49bb34727cc2c520e6e304e3049d669f53e2d30d
 <h4 id=122-拉取镜像>1.2.2. 拉取镜像</h4>
 <p>由于是非标准格式的 OCI 镜像，直接使用 Docker CLI 拉取会出错：</p>
 <pre><code class=language-bash>v1: Pulling from bifrost/hello-wasm
-4c7915b4c1f9: Pulling fs layer 
+4c7915b4c1f9: Pulling fs layer
 invalid rootfs in image configuration
 </code></pre>
 <h4 id=123-wasm-module-与容器区别>1.2.3. WASM module 与容器区别</h4>
@@ -308,7 +308,7 @@ krustlet-wasi[20706]: [2021-07-08T08:31:46Z DEBUG hyper::client::pool] pooling i
 krustlet-wasi[20706]: [2021-07-08T08:31:46Z DEBUG reqwest::async_impl::client] response '200 OK' for https://harbor..../service/token?scope=repository%3Abifrost%2Fhello-wasm%3Apull&amp;service=harbor-registry
 krustlet-wasi[20706]: [2021-07-08T08:31:46Z DEBUG oci_distribution::client] Received response from auth request: {&quot;token&quot;:&quot;...&quot;,&quot;access_token&quot;:&quot;&quot;,&quot;expires_in&quot;:1800,&quot;issued_at&quot;:&quot;2021-07-08T08:31:46Z&quot;}
 krustlet-wasi[20706]: [2021-07-08T08:31:46Z ERROR kubelet::state::common::image_pull] Failed to decode registry token from auth request
-krustlet-wasi[20706]:     
+krustlet-wasi[20706]:
 krustlet-wasi[20706]:     Caused by:
 krustlet-wasi[20706]:         duplicate field `token` at line 1 column 1129
 krustlet-wasi[20706]: [2021-07-08T08:31:46Z DEBUG krator::state] State::status
@@ -323,7 +323,7 @@ krustlet-wasi[20706]: [2021-07-08T08:31:46Z DEBUG krator::state] Applying status
 wasm-hello        0/1     ExitCode:0         0          13m
 </code></pre>
 <p>Pod 被调度后立刻被执行，返回 ExitCode 0。</p>
-<pre><code class=language-bash>&gt; k logs -n ns-msp -f wasm-hello 
+<pre><code class=language-bash>&gt; k logs -n ns-msp -f wasm-hello
 hello from stdout!
 hello from stderr!
 Args are: []
@@ -476,7 +476,7 @@ COPY --from=builder /hello-wasm .
 CMD [&quot;/hello-wasm&quot;]
 </code></pre>
 <p>虽然 Dockerfile 里写了 <code>CMD</code> ，但是如果直接在操作系统上执行命令，会报错：</p>
-<pre><code class=language-bash>&gt; ./bin/hello-wasm 
+<pre><code class=language-bash>&gt; ./bin/hello-wasm
 zsh: exec format error: ./bin/hello-wasm
 </code></pre>
 <p>推测 <a href=https://github.com/dmcgowan/containerd-wasm><code>github.com/dmcgowan/containerd-wasm</code></a> 库实际上会解析 Container 文件系统，提取出要执行的 WASM module，最后调用运行时（wasmtime/wasmer）运行 WASM。</p>
@@ -539,7 +539,7 @@ Hello from WebAssembly!
 </footer>
 </article>
 <script src=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.min.js></script>
-<aside class=typeface-sans lang=ja>
+<aside class=typeface-sans lang=zh-hans>
 <nav class=toc></nav>
 </aside>
 <script>tocbot.init({tocSelector:'.toc',contentSelector:'article',headingSelector:'h1, h2, h3, h4, h5',hasInnerContainers:!0,collapseDepth:"3",positionFixedSelector:".toc",headingsOffset:10})</script>

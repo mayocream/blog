@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1719907581" media=all>
+<link rel=stylesheet href="/bundle.css?v=1719908117" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://github.com/mayocream.png><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://mayo.rocks/2020/12/hugo-source-code-reading/><meta property="og:title" content="Hugo 源码阅读">
@@ -29,7 +29,7 @@
 <a class=page-link href=/about/>About</a>
 </nav><header class=post-header>
 <a class=site-title href=https://mayo.rocks>Mayo's Blog</a>
-<h1 class="post-title baseline-fix typeface-sans" lang=zh itemprop="name headline">Hugo 源码阅读</h1>
+<h1 class="post-title baseline-fix typeface-sans" lang=zh-hans itemprop="name headline">Hugo 源码阅读</h1>
 </header>
 <div class=post-cover aria-label=Cover>
 <div class=post-cover-wrapper>
@@ -38,11 +38,11 @@
 <div class=cover-meta></div>
 </div>
 <div class=post-layout>
-<article class="post typeface-sans" lang=zh itemscope itemtype=http://schema.org/BlogPosting>
+<article class="post typeface-sans" lang=zh-hans itemscope itemtype=http://schema.org/BlogPosting>
 <div class=post-content itemprop=articleBody>
 <p>这篇源码阅读编写于 2020 年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发现代码量巨大，而且内部实现逻辑较为复杂，在这里也只对部分逻辑进行了梳理（只是冰山一角）。</p>
 <h2 id=1-概述>1. 概述</h2>
-<p>我阅读并作出中文注释的 Commits 可以在这里看到：<br>
+<p>我阅读并作出中文注释的 Commits 可以在这里看到：
 <a href="https://github.com/mayocream/hugo/commits?author=mayocream">https://github.com/mayocream/hugo/commits?author=mayocream</a></p>
 <p>阅读源码的过程中也当 typofix 机器人提了 <a href=https://github.com/gohugoio/hugo/pull/8034>PR</a>，毕竟自己确实没有能贡献的地方。不过阅读源码并注释帮助理解，方便整理也是一个好习惯，在工作中我逐渐学会了。</p>
 <p>根据 <a href=https://en.wikipedia.org/wiki/Hugo_(software)>Wikipedia</a> 的记载，Hugo 早在 2013 年就发布了，直到去年我一直没有使用过，可能是它没有官方的中文文档，Go 语言对当时我也太生疏，而且 Hugo 的模板语法和 Hexo 与 Jekyll 也不一样，而且官方推荐用 Theme 的方式是 Git Submodule，相比于 Hexo 上手难度还是高一些。</p>
@@ -202,7 +202,7 @@ Complete documentation is available at http://gohugo.io/.`,
 			return c.build()
 		},
 	})
-   
+
     ...
 </code></pre>
 <h4 id=221-配置文件加载>2.2.1. 配置文件加载</h4>
@@ -950,7 +950,7 @@ type verr struct {
 </footer>
 </article>
 <script src=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.min.js></script>
-<aside class=typeface-sans lang=zh>
+<aside class=typeface-sans lang=zh-hans>
 <nav class=toc></nav>
 </aside>
 <script>tocbot.init({tocSelector:'.toc',contentSelector:'article',headingSelector:'h1, h2, h3, h4, h5',hasInnerContainers:!0,collapseDepth:"3",positionFixedSelector:".toc",headingsOffset:10})</script>

@@ -10,7 +10,7 @@
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
 <link href="https://fonts.googleapis.com/css?family=Crimson+Text:400,700|Press+Start+2P" rel=stylesheet>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400&family=Noto+Sans+JP:wght@300;400&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif:wght@300;400&family=Noto+Serif+JP:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Source+Code+Pro:wght@300;400" rel=stylesheet>
-<link rel=stylesheet href="/bundle.css?v=1719907581" media=all>
+<link rel=stylesheet href="/bundle.css?v=1719908117" media=all>
 <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.css>
 <link rel=icon href=https://github.com/mayocream.png><meta name=generator content="Hugo 0.88.1">
 <link rel=canonical href=https://mayo.rocks/2021/09/kong-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/><meta property="og:title" content="Kong 源码分析">
@@ -29,7 +29,7 @@
 <a class=page-link href=/about/>About</a>
 </nav><header class=post-header>
 <a class=site-title href=https://mayo.rocks>Mayo's Blog</a>
-<h1 class="post-title baseline-fix typeface-sans" lang=ja itemprop="name headline">Kong 源码分析</h1>
+<h1 class="post-title baseline-fix typeface-sans" lang=zh-hans itemprop="name headline">Kong 源码分析</h1>
 </header>
 <div class=post-cover aria-label=Cover>
 <div class=post-cover-wrapper>
@@ -38,7 +38,7 @@
 <div class=cover-meta></div>
 </div>
 <div class=post-layout>
-<article class="post typeface-sans" lang=ja itemscope itemtype=http://schema.org/BlogPosting>
+<article class="post typeface-sans" lang=zh-hans itemscope itemtype=http://schema.org/BlogPosting>
 <div class=post-content itemprop=articleBody>
 <p>本文最初于 2020 年 9 月在公司内部发表，现整理并增加部分批注公开发布。</p>
 <p>最开始加入公司 Infrastructure 团队时，迷茫的我接到的的一个任务就是学习 Lua 和 <a href=https://github.com/openresty/lua-nginx-module>OpenResty</a>，当时收到了两本书籍的 PDF 文件，要求尽快理解学习，能够掌握 <a href=https://github.com/Kong/kong>Kong</a>，并且具有研发能力。</p>
@@ -47,7 +47,7 @@
 <p>继这篇文章之后，我还撰写了 Kong Ingress Controller 源码分析，后续还有 APISIX 的源码分析哦。</p>
 <h2 id=1-概述>1. 概述</h2>
 <p>本文针对的是 Kong 2.1 版本（Stable）。</p>
-<p>我阅读并作出中文注释的 Commits 可以在这里看到： <br>
+<p>我阅读并作出中文注释的 Commits 可以在这里看到：
 <a href="https://github.com/mayocream/kong/commits?author=huanghan39">https://github.com/mayocream/kong/commits?author=mayocream</a></p>
 <p><strong>Kong（OpenResty）的执行阶段</strong>：</p>
 <p>
@@ -101,7 +101,7 @@ http {
         server 0.0.0.1;
 
         # injected nginx_upstream_* directives
-        
+
         balancer_by_lua_block {
             Kong.balancer()
         }
@@ -529,8 +529,8 @@ end
   -- 访问不存在的对象则先
   -- DB.xxx 再访问 DB.daos.xxx
   return setmetatable(self, DB)
-  
-  
+
+
 local DB = {}
 DB.__index = function(self, k)
   -- rawget 为不调用元组 __index 方法，直接获取原数据
@@ -1538,7 +1538,7 @@ local function rebuild(name, callback, version, opts)
   if current_version == version then
     return true
   end
-	
+
   -- 开一个 cosocket 协程调用 callback
   return concurrency.with_coroutine_mutex(opts, callback)
 end
@@ -1726,7 +1726,7 @@ end
 combos:
   plugin_name:
     # both: {}
-    both: 
+    both:
       route_id: service_id
     # routes: {}
     routes:
@@ -1798,7 +1798,7 @@ loaded:
         return plugin_configuration
       end
     end
-	
+
     ...
 
     if combos[COMBO_GLOBAL] then
@@ -2018,7 +2018,7 @@ end
                             src_ip, src_port,
                             dst_ip, dst_port,
                             sni, req_headers)
-    
+
     req_method = req_method or &quot;&quot;
     req_uri = req_uri or &quot;&quot;
     req_host = req_host or &quot;&quot;
@@ -2033,7 +2033,7 @@ end
     ctx.dst_ip         = dst_ip or &quot;&quot;
     ctx.dst_port       = dst_port or &quot;&quot;
     ctx.sni            = sni or &quot;&quot;
-    
+
     local cache_key = req_method .. &quot;|&quot; .. req_uri .. &quot;|&quot; .. req_host ..
                       &quot;|&quot; .. ctx.src_ip .. &quot;|&quot; .. ctx.src_port ..
                       &quot;|&quot; .. ctx.dst_ip .. &quot;|&quot; .. ctx.dst_port ..
@@ -2456,12 +2456,12 @@ end
       self.args.post[foreign_field_name] = foreign_schema:extract_pk_values(foreign_entity)
     end
 
-    -- 处理请求，参数校验，插入数据    
+    -- 处理请求，参数校验，插入数据
     local entity, _, err_t = insert_entity(self, db, schema, method)
     if err_t then
       return handle_error(err_t)
     end
-    
+
     -- 回调函数
     if post_process then
       entity, _, err_t = post_process(entity)
@@ -2497,7 +2497,7 @@ end
                     elements = {
                       type = &quot;record&quot;,
                       fields = {
-                        { vars = { type = &quot;array&quot;, elements = { 
+                        { vars = { type = &quot;array&quot;, elements = {
                             type = &quot;array&quot;,
                             elements = { type = &quot;string&quot; }
                         } } }
@@ -2562,7 +2562,7 @@ kong.log.set_serialize_value(&quot;waf&quot;, entry)
 </footer>
 </article>
 <script src=https://cdn.jsdelivr.net/npm/tocbot/dist/tocbot.min.js></script>
-<aside class=typeface-sans lang=ja>
+<aside class=typeface-sans lang=zh-hans>
 <nav class=toc></nav>
 </aside>
 <script>tocbot.init({tocSelector:'.toc',contentSelector:'article',headingSelector:'h1, h2, h3, h4, h5',hasInnerContainers:!0,collapseDepth:"3",positionFixedSelector:".toc",headingsOffset:10})</script>
