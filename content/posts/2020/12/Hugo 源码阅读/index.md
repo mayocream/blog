@@ -3,7 +3,7 @@ title: Hugo 源码阅读
 slug: hugo-source-code-reading
 date: "2020-12-10"
 toc: true
-lang: zh
+lang: zh-Hans
 typeface: sans
 ---
 
@@ -11,14 +11,14 @@ typeface: sans
 
 ## 1. 概述
 
-我阅读并作出中文注释的 Commits 可以在这里看到：  
+我阅读并作出中文注释的 Commits 可以在这里看到：
 [https://github.com/mayocream/hugo/commits?author=mayocream](https://github.com/mayocream/hugo/commits?author=mayocream)
 
 阅读源码的过程中也当 typofix 机器人提了 [PR](https://github.com/gohugoio/hugo/pull/8034)，毕竟自己确实没有能贡献的地方。不过阅读源码并注释帮助理解，方便整理也是一个好习惯，在工作中我逐渐学会了。
 
 根据 [Wikipedia](https://en.wikipedia.org/wiki/Hugo_(software)) 的记载，Hugo 早在 2013 年就发布了，直到去年我一直没有使用过，可能是它没有官方的中文文档，Go 语言对当时我也太生疏，而且 Hugo 的模板语法和 Hexo 与 Jekyll 也不一样，而且官方推荐用 Theme 的方式是 Git Submodule，相比于 Hexo 上手难度还是高一些。
 
-现在作为使用者来说，Hugo 使用的 Go 模板语法很好用，Hugo 基于模板的 Pipeline 实现的数据预处理也非常方便，用了就停不下来了。而且基于 [esbuild](https://github.com/evanw/esbuild) 的打包使得静态资源的构建也很方便，终于脱离 Webpack 了。我还有一个弃坑的项目 [material-design-blog](https://github.com/mayocream/material-design-blog) 也是使用的 Snowpack (esbuild) 进行静态资源的打包，不知道都已经是 2021 年末了，为什么公司的那群人还要使用 Webpack 缓慢地构建呢。 
+现在作为使用者来说，Hugo 使用的 Go 模板语法很好用，Hugo 基于模板的 Pipeline 实现的数据预处理也非常方便，用了就停不下来了。而且基于 [esbuild](https://github.com/evanw/esbuild) 的打包使得静态资源的构建也很方便，终于脱离 Webpack 了。我还有一个弃坑的项目 [material-design-blog](https://github.com/mayocream/material-design-blog) 也是使用的 Snowpack (esbuild) 进行静态资源的打包，不知道都已经是 2021 年末了，为什么公司的那群人还要使用 Webpack 缓慢地构建呢。
 
 Hugo 现在基本上 Github 上开源项目文档发布的标配，不过 Cloudflare 的开发者文档是使用 [Gatsby](https://www.gatsbyjs.com/) 发布的，可能 Cloudflare 内部 JavaScript 用得也多吧，Worker 对于 Go 就[没有原生支持](https://community.cloudflare.com/t/native-golang-support-for-workers/65896)。
 
@@ -203,7 +203,7 @@ Complete documentation is available at http://gohugo.io/.`,
 			return c.build()
 		},
 	})
-   
+
     ...
 ```
 
@@ -697,7 +697,7 @@ func (w *Workers) Start(ctx context.Context) (Runner, context.Context) {
 
 ```
 
-Playground 测试示例: https://play.golang.org/p/4AJtyVnlSOd 
+Playground 测试示例: https://play.golang.org/p/4AJtyVnlSOd
 
 ```go
 func main() {

@@ -2,6 +2,7 @@
 title: "在 Kubernetes 集群制造混沌"
 date: "2021-10-21"
 toc: true
+lang: zh-Hans
 typeface: sans
 ---
 
@@ -194,7 +195,7 @@ func (b *ChaosDaemonClientBuilder) Build(ctx context.Context, pod *v1.Pod) (chao
 
 向 Chaos Daemon 发送命令时会依据 Pod 信息创建对应的客户端，例如要控制某个 Node 上的 Pod，会获取该 Pod 所在 Node 的 ClusterIP，以创建客户端。如果 TLS 证书配置存在，Controller Manager 会为客户端添加 TLS 证书。
 
-Chaos Daemon 在启动时如果有 TLS 证书，会附加证书以启用 grpcs。TLS 校验配置 `RequireAndVerifyClientCert` 表示启用双向 TLS 认证（mTLS）。 
+Chaos Daemon 在启动时如果有 TLS 证书，会附加证书以启用 grpcs。TLS 校验配置 `RequireAndVerifyClientCert` 表示启用双向 TLS 认证（mTLS）。
 
 ```go
 func newGRPCServer(containerRuntime string, reg prometheus.Registerer, tlsConf tlsConfig) (*grpc.Server, error) {
@@ -348,7 +349,7 @@ func Apply(netem *pb.Netem, pid uint32) error {
 在 Chaos Daemon 的 Dockerfile 中，可以看到其依赖的 Linux 工具链：
 
 ```dockerfile
-RUN apt-get update && \ 
+RUN apt-get update && \
     apt-get install -y tzdata iptables ipset stress-ng iproute2 fuse util-linux procps curl && \
     rm -rf /var/lib/apt/lists/*
 ```
@@ -732,16 +733,16 @@ Spec:
       dev
 Status:
   Conditions:
-    Reason:  
+    Reason:
     Status:  False
     Type:    Paused
-    Reason:  
+    Reason:
     Status:  True
     Type:    Selected
-    Reason:  
+    Reason:
     Status:  True
     Type:    AllInjected
-    Reason:  
+    Reason:
     Status:  False
     Type:    AllRecovered
   Experiment:

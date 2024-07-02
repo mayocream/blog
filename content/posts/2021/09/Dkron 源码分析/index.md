@@ -2,6 +2,7 @@
 title: "Dkron 源码分析"
 date: "2021-09-23T02:16:00+08:00"
 toc: true
+lang: zh-Hans
 typeface: sans
 ---
 
@@ -82,9 +83,9 @@ Dkron 任务调度程序和执行节点通过 RPC 通信。
 
 #### 1.2.3. 状态储存
 
-> We have two options: store data externally in a generally available  distributed storage, or store a small amount of state as part of the  Cron service itself. When designing the distributed Cron, we opted for  the second option. 
+> We have two options: store data externally in a generally available  distributed storage, or store a small amount of state as part of the  Cron service itself. When designing the distributed Cron, we opted for  the second option.
 
-任务执行状态在 Dkron 被视为是与 Server 一体的，Dkron 通过 Raft FSM 在调度集群 Server 之间同步 Job 和 Job  执行历史的数据。*社区版本数据储存在内存 KV (Buntdb) 中，Pro 版本支持 etcd 储存。* 
+任务执行状态在 Dkron 被视为是与 Server 一体的，Dkron 通过 Raft FSM 在调度集群 Server 之间同步 Job 和 Job  执行历史的数据。*社区版本数据储存在内存 KV (Buntdb) 中，Pro 版本支持 etcd 储存。*
 
 持久化数据通过 Raft Snapshot 实现。
 
@@ -458,7 +459,7 @@ func (a *Agent) setupRaft() error {
 	}
 
     ...
-	//	参数: 实现了 Storage 的 DB, 默认 nil, logger 
+	//	参数: 实现了 Storage 的 DB, 默认 nil, logger
 	// 创建实现 raft FSM 接口
 	// raft 只是定义了一个接口，最终交给应用层实现。应用层收到 Log 后按 业务需求 还原为 应用数据保存起来
 	//	Raft 启动时 便 Raft.runFSM 起一个goroutine 从 fsmMutateCh channel 消费log ==> FSM.Apply
@@ -1006,16 +1007,16 @@ func (p *Plugins) pluginFactory(path string, pluginType string) (interface{}, er
 	var config plugin.ClientConfig
 	// 可执行文件
 	config.Cmd = exec.Command(path)
-    
+
 	// handshake 配置是 client 与 server 约定的 TOKEN,
 	//	不通过环境变量包含同样的 TOKEN 则无法启动 plugin 程序.
 	//	具体查看 go-plugin 项目 https://github.com/mayocream/go-plugin/blob/044aadd925bf9f027cb301b2af9bc6b60775dd22/server.go#L248
 	config.HandshakeConfig = dkplugin.Handshake
-    
+
 	// go-plugin 包会在 NewClient 的时候储存 Client 的指针,
 	//	能够调用 cleanClients 统一 Kill 所有的 Client
 	config.Managed = true
-    
+
 	// 定义一个二进制所能包含的不同插件
 	config.Plugins = dkplugin.PluginMap
 	config.SyncStdout = os.Stdout
@@ -1374,7 +1375,7 @@ func (a *Agent) Run(jobName string, ex *Execution) (*Job, error) {
 		wg.Add(1)
 		go func(node string, wg *sync.WaitGroup) {
 			defer wg.Done()
-              
+
             // 这里真正调用 GRPC 到 agent 执行
 			err := a.GRPCClient.AgentRun(node, job.ToProto(), ex.ToProto())
 			if err != nil {

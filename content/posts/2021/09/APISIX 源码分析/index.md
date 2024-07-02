@@ -2,6 +2,7 @@
 title: "APISIX 源码分析"
 date: "2021-09-27"
 toc: true
+lang: zh-Hans
 typeface: sans
 ---
 
@@ -44,7 +45,7 @@ graph LR
 	A --> |Many| D
 	B --> |Many| D
 	E(Consumers) --> |Many| D
-	
+
 ```
 
 比较有意思的是我翻到 APISIX 的一个 issue 中，项目开发者说不确定是什么原因，我们看看同行怎么做的吧。
@@ -494,7 +495,7 @@ OpenResty 特权进程不能处理请求，只能由 Timer 触发，逻辑上编
 
 
 ```lua
--- worker 默认后台运行的 timer, 执行各种后台任务 
+-- worker 默认后台运行的 timer, 执行各种后台任务
 local function background_timer()
     if core.table.nkeys(timers) == 0 then
         return
@@ -839,7 +840,7 @@ local function load_full_data(self, dir_res, headers)
         for _, item in ipairs(dir_res.nodes) do
             local key = short_key(self, item.key)
             local data_valid = true
-            
+
             -- 数据格式校验...
 
             -- schema 校验...
@@ -883,7 +884,7 @@ graph TD
 		D --> F
 		E --> F
 	end
-	
+
 ```
 
 ```lua
@@ -1140,7 +1141,7 @@ do
     local uri_routes = {}
     local uri_router
     local match_opts = {}
-    
+
     function _M.match(api_ctx)
         -- 从 module 的 user_routes 属性获取路由, 在 etcd route 变化时回调添加
         local user_routes = _M.user_routes
@@ -1265,7 +1266,7 @@ graph TD
 	b2 -.-> c1
 ```
 
-`set_balancer_opts` 设置 Nginx Balancer 参数。 
+`set_balancer_opts` 设置 Nginx Balancer 参数。
 
 ```lua
 -- set_balancer_opts will be called in balancer phase and before any tries
@@ -1607,7 +1608,7 @@ function _M.http_access_phase()
     -- 将 table 储存在 ngx.ctx 中, 下一个阶段共享
     ngx_ctx.api_ctx = api_ctx
 
-    -- 绑定 metatable 
+    -- 绑定 metatable
     core.ctx.set_vars_meta(api_ctx)
 	...
 
@@ -1812,7 +1813,7 @@ ffi.cdef[[
 
     const char *WasmEdge_VersionGet();
     void WasmEdge_LogSetDebugLevel();
-    
+
     WasmEdge_Result WasmEdge_VMRunWasmFromFile(
         WasmEdge_VMContext *Cxt, const char *Path, const WasmEdge_String FuncName,
         const WasmEdge_Value *Params, const uint32_t ParamLen,
@@ -1840,7 +1841,7 @@ local vmconf = wasmedge.WasmEdge_ConfigureCreate()
 -- 创建 VM, 第二个参数是 Store, 我们默认传 null
 local vmctx = wasmedge.WasmEdge_VMCreate(vmconf, ffi.NULL)
 -- 执行 wasm
-local result = wasmedge.WasmEdge_VMRunWasmFromFile(vmctx, test_wasm_add_path, 
+local result = wasmedge.WasmEdge_VMRunWasmFromFile(vmctx, test_wasm_add_path,
         wasmedge.WasmEdge_StringCreateByCString("add"), nil,
         0, nil, 0)
 ```
@@ -1904,7 +1905,7 @@ APISIX 目前还没提供 Go 的 SDK。APISIX 开源的 Traffic Split 以及 Mir
 
 我认为公司目前仍可以继续使用 Kong 网关，经历本次 APISIX 源码阅读，与 OpenResty 相关体系的学习后二次开发能力有所提升。
 
-如果要将公司网关从 Kong 迁移到 APISIX 的附加成本很高，开发、迁移、其他部门协调时间至少需要 2 周，对比起来收益并不大，公司现在并不缺少 APISIX 的功能。 
+如果要将公司网关从 Kong 迁移到 APISIX 的附加成本很高，开发、迁移、其他部门协调时间至少需要 2 周，对比起来收益并不大，公司现在并不缺少 APISIX 的功能。
 
 阅读过源码后 APISIX 唯一比较好的功能点是支持外部注册中心，公司使用 Bilibili discovery 注册中心二次开发版本，接入注册中心后能够获取到服务更多元数据，便于后续在网关对服务进行治理。Kong 网关社区有 Consul 接入的讨论，可以继续关注该 Issue 进展，或为社区提议开发相应功能。
 

@@ -2,6 +2,7 @@
 title: "Istio 安全源码分析之 PKI 与通信安全"
 date: "2021-10-26T23:00:00+08:00"
 typeface: sans
+lang: zh-Hans
 toc: true
 ---
 
@@ -20,7 +21,7 @@ SPIFFE 是 Istio 所采用的安全命名的规范，它也是云原生定义的
 ### 1.1. 介绍
 
 [Secure Production Identity Framework For Everyone (SPIFFE)](https://spiffe.io/) 是一套服务之间相互进行身份识别的标准，主要包含以下内容：
-  
+
 - SPIFFE ID 标准，SPIFFE ID 是服务的唯一标识，具体实现使用 URI 资源标识符。
 - SPIFFE Verifiable Identity Document (SVID) 标准，将 SPIFFE ID 编码到一个加密的可验证的数据格式中。
 - 颁发与撤销 SVID 的 API 标准。
@@ -154,7 +155,7 @@ Istio 实现了 [SPIFFE Bundle](https://github.com/spiffe/spiffe/blob/master/sta
 
 Istio 定义的数据格式：
 
-- _<trustdomain, endpoint>_ 元组以 || 分割 
+- _<trustdomain, endpoint>_ 元组以 || 分割
 - 每个元组内使用 | 分割 trustdomain 和 endpoint
 - 例如：`foo|https://url/for/foo||bar|https://url/for/bar`
 
@@ -266,7 +267,7 @@ var (
     // 挂载名为 cacerts 的 secret 的目录，Read-only
     LocalCertDir = env.RegisterStringVar("ROOT_CA_DIR", "./etc/cacerts",
         "Location of a local or mounted CA root")
-    
+
     // 默认服务证书 TTL
     workloadCertTTL = env.RegisterDurationVar("DEFAULT_WORKLOAD_CERT_TTL",
         cmd.DefaultWorkloadCertTTL,
@@ -977,7 +978,7 @@ func (s *Server) CreateCertificate(ctx context.Context, request *pb.IstioCertifi
     // 签发证书
     cert, signErr := s.ca.Sign(
         []byte(request.Csr), caller.Identities, time.Duration(request.ValidityDuration)*time.Second, false)
-    
+
     respCertChain := []string{string(cert)}
     if len(certChainBytes) != 0 {
         // 加入证书链
@@ -1113,7 +1114,7 @@ ClientAuth 有五种类型，各自的含义是：
 
 ```go
  // pilot/pkg/bootstrap/server.go
- 
+
      // Notice that the order of authenticators matters, since at runtime
      // authenticators are activated sequentially and the first successful attempt
      // is used as the authentication result.
@@ -1122,7 +1123,7 @@ ClientAuth 有五种类型，各自的含义是：
          &authenticate.ClientCertAuthenticator{},
          kubeauth.NewKubeJWTAuthenticator(s.kubeClient, s.clusterID, s.multicluster.GetRemoteKubeClient, spiffe.GetTrustDomain(), features.JwtPolicy.Get()),
      }
- 
+
      // 默认启用
      caOpts.Authenticators = authenticators
      if features.XDSAuth {
@@ -1300,7 +1301,7 @@ func (a *KubeJWTAuthenticator) Authenticate(ctx context.Context) (*authenticate.
     var id []string
 
     kubeClient := a.GetKubeClient(clusterID)
-    
+
     id, err = tokenreview.ValidateK8sJwt(kubeClient, targetJWT, aud)
     ...
     callerNamespace := id[0]
@@ -1689,7 +1690,7 @@ func (sc *SecretCache) addFileWatcher(file string, token string, connKey ConnKey
 监听根证书文件的变化：
 
 ```go
-// security/pkg/nodeagent/cache/secretcache.go        
+// security/pkg/nodeagent/cache/secretcache.go
     if sitem, err = sc.generateRootCertFromExistingFile(sc.existingRootCertFile, token, connKey, true); err == nil {
             sc.addFileWatcher(sc.existingRootCertFile, token, connKey)
         }

@@ -3,6 +3,7 @@ title: "K8s 集群调度 WASM 实验"
 date: "2021-09-23T21:00:00+08:00"
 tags: ["WASM", "模型试验"]
 typeface: sans
+lang: zh-Hans
 toc: true
 ---
 
@@ -12,7 +13,7 @@ WASM 在当前阶段还很尴尬，WASI（WebAssembly System Interface）还处�
 
 当我们也看到了一些希望：Go 官方也许会[支持 WASI](https://github.com/golang/go/issues/31105)、APISIX 准备[使用 Wamser 作为 WASM 运行时](https://github.com/apache/apisix/issues/157)。
 
-我当前在进行的另一个项目也通过在浏览器中加载 WASM 实现 X.509 证书解析、签名与 ACME 申请证书，该项目还会使用 Serverless 技术进行流量代理，不过这个坑何时能填完就没有人知道了 💀。 
+我当前在进行的另一个项目也通过在浏览器中加载 WASM 实现 X.509 证书解析、签名与 ACME 申请证书，该项目还会使用 Serverless 技术进行流量代理，不过这个坑何时能填完就没有人知道了 💀。
 
 ## 1. Krustlet 调度 WASM
 
@@ -132,11 +133,11 @@ tar zxvf /tmp/krustlet.tar.gz && mv krustlet-wasi /usr/local/bin/
       memory:             4032800Ki
       pods:               110
     System Info:
-      Machine ID:                 
-      System UUID:                
-      Boot ID:                    
-      Kernel Version:             
-      OS Image:                   
+      Machine ID:
+      System UUID:
+      Boot ID:
+      Kernel Version:
+      OS Image:
       Operating System:           linux
       Architecture:               wasm-wasi
       Container Runtime Version:  mvp
@@ -216,8 +217,8 @@ wasm-to-oci push hello.wasm harbor.domain.dev/bifrost/hello-wasm:v1
 Push 输出：
 
 ```bash
-INFO[0001] Pushed: harbor.domain.dev/bifrost/hello-wasm:v1 
-INFO[0001] Size: 1624962                                
+INFO[0001] Pushed: harbor.domain.dev/bifrost/hello-wasm:v1
+INFO[0001] Size: 1624962
 INFO[0001] Digest: sha256:a01f32cc647abe49bb34727cc2c520e6e304e3049d669f53e2d30d49ee2ed9c7
 ```
 
@@ -249,7 +250,7 @@ wasm-oci 使用了自定义的 OCI Layer，属于非标准类型。
 
 ```bash
 v1: Pulling from bifrost/hello-wasm
-4c7915b4c1f9: Pulling fs layer 
+4c7915b4c1f9: Pulling fs layer
 invalid rootfs in image configuration
 ```
 
@@ -308,7 +309,7 @@ pod/wasm-hello created
     krustlet-wasi[20706]: [2021-07-08T08:31:46Z DEBUG reqwest::async_impl::client] response '200 OK' for https://harbor..../service/token?scope=repository%3Abifrost%2Fhello-wasm%3Apull&service=harbor-registry
     krustlet-wasi[20706]: [2021-07-08T08:31:46Z DEBUG oci_distribution::client] Received response from auth request: {"token":"...","access_token":"","expires_in":1800,"issued_at":"2021-07-08T08:31:46Z"}
     krustlet-wasi[20706]: [2021-07-08T08:31:46Z ERROR kubelet::state::common::image_pull] Failed to decode registry token from auth request
-    krustlet-wasi[20706]:     
+    krustlet-wasi[20706]:
     krustlet-wasi[20706]:     Caused by:
     krustlet-wasi[20706]:         duplicate field `token` at line 1 column 1129
     krustlet-wasi[20706]: [2021-07-08T08:31:46Z DEBUG krator::state] State::status
@@ -329,7 +330,7 @@ wasm-hello        0/1     ExitCode:0         0          13m
 Pod 被调度后立刻被执行，返回 ExitCode 0。
 
 ```bash
-> k logs -n ns-msp -f wasm-hello 
+> k logs -n ns-msp -f wasm-hello
 hello from stdout!
 hello from stderr!
 Args are: []
@@ -495,7 +496,7 @@ CMD ["/hello-wasm"]
 虽然 Dockerfile 里写了 `CMD` ，但是如果直接在操作系统上执行命令，会报错：
 
 ```bash
-> ./bin/hello-wasm 
+> ./bin/hello-wasm
 zsh: exec format error: ./bin/hello-wasm
 ```
 

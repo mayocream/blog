@@ -2,10 +2,11 @@
 title: Kong 源码分析
 date: "2021-09-21T04:30:00+08:00"
 toc: true
+lang: zh-Hans
 typeface: sans
 ---
 
-本文最初于 2020 年 9 月在公司内部发表，现整理并增加部分批注公开发布。  
+本文最初于 2020 年 9 月在公司内部发表，现整理并增加部分批注公开发布。
 
 最开始加入公司 Infrastructure 团队时，迷茫的我接到的的一个任务就是学习 Lua 和 [OpenResty](https://github.com/openresty/lua-nginx-module)，当时收到了两本书籍的 PDF 文件，要求尽快理解学习，能够掌握 [Kong](https://github.com/Kong/kong)，并且具有研发能力。
 
@@ -19,7 +20,7 @@ typeface: sans
 
 本文针对的是 Kong 2.1 版本（Stable）。
 
-我阅读并作出中文注释的 Commits 可以在这里看到：    
+我阅读并作出中文注释的 Commits 可以在这里看到：
 [https://github.com/mayocream/kong/commits?author=mayocream](https://github.com/mayocream/kong/commits?author=huanghan39)
 
 **Kong（OpenResty）的执行阶段**：
@@ -80,7 +81,7 @@ http {
         server 0.0.0.1;
 
         # injected nginx_upstream_* directives
-        
+
         balancer_by_lua_block {
             Kong.balancer()
         }
@@ -556,8 +557,8 @@ end
   -- 访问不存在的对象则先
   -- DB.xxx 再访问 DB.daos.xxx
   return setmetatable(self, DB)
-  
-  
+
+
 local DB = {}
 DB.__index = function(self, k)
   -- rawget 为不调用元组 __index 方法，直接获取原数据
@@ -1684,7 +1685,7 @@ local function rebuild(name, callback, version, opts)
   if current_version == version then
     return true
   end
-	
+
   -- 开一个 cosocket 协程调用 callback
   return concurrency.with_coroutine_mutex(opts, callback)
 end
@@ -1899,7 +1900,7 @@ map:
 combos:
   plugin_name:
     # both: {}
-    both: 
+    both:
       route_id: service_id
     # routes: {}
     routes:
@@ -1976,7 +1977,7 @@ local function load_configuration_through_combos(ctx, combos, plugin)
         return plugin_configuration
       end
     end
-	
+
     ...
 
     if combos[COMBO_GLOBAL] then
@@ -2117,7 +2118,7 @@ Kong 针对缓存有这些操作：
 
 上述 Entity 加载在由 mlcache 库创建的 L1+L2 两级缓存 `core_cache` 中。
 
-而 consumers 加载到同为 mlcache 创建的不同名的 `cache` 中。 
+而 consumers 加载到同为 mlcache 创建的不同名的 `cache` 中。
 
 ##  8. 请求生命周期
 
@@ -2229,7 +2230,7 @@ end
                             src_ip, src_port,
                             dst_ip, dst_port,
                             sni, req_headers)
-    
+
     req_method = req_method or ""
     req_uri = req_uri or ""
     req_host = req_host or ""
@@ -2244,7 +2245,7 @@ end
     ctx.dst_ip         = dst_ip or ""
     ctx.dst_port       = dst_port or ""
     ctx.sni            = sni or ""
-    
+
     local cache_key = req_method .. "|" .. req_uri .. "|" .. req_host ..
                       "|" .. ctx.src_ip .. "|" .. ctx.src_port ..
                       "|" .. ctx.dst_ip .. "|" .. ctx.dst_port ..
@@ -2721,12 +2722,12 @@ local function post_collection_endpoint(schema, foreign_schema, foreign_field_na
       self.args.post[foreign_field_name] = foreign_schema:extract_pk_values(foreign_entity)
     end
 
-    -- 处理请求，参数校验，插入数据    
+    -- 处理请求，参数校验，插入数据
     local entity, _, err_t = insert_entity(self, db, schema, method)
     if err_t then
       return handle_error(err_t)
     end
-    
+
     -- 回调函数
     if post_process then
       entity, _, err_t = post_process(entity)
@@ -2769,7 +2770,7 @@ local schema = {
                     elements = {
                       type = "record",
                       fields = {
-                        { vars = { type = "array", elements = { 
+                        { vars = { type = "array", elements = {
                             type = "array",
                             elements = { type = "string" }
                         } } }
