@@ -46,9 +46,6 @@ date: "{formatted_date}"
 toc: false
 typeface: serif
 ---
-
-> This is the content for the note titled "{title}" published on [{entry_url}]({entry_url}).
-
 {markdown_content}
 """
 
