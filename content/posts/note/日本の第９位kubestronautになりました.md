@@ -20,7 +20,7 @@ CredlyにもKubestronautというBadgeがあります。
 *Credly is a global Open Badge platform that closes the gap be*
 *www.credly.com*](https://www.credly.com/users/mayo)
 
-![](https://assets.st-note.com/img/1720860322465-HYKrxrf3Je.png?width=800)
+![](https://assets.st-note.com/img/1720860322465-HYKrxrf3Je.png?width=1200)
 
 Kubestronaut
 
