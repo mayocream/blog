@@ -38,6 +38,11 @@ for entry in feed.entries:
     else:
         markdown_content = "Content not found."
 
+    # Featured image
+    featured_image = soup.find(class_='o-noteEyecatch__image')
+    if featured_image:
+        markdown_content = markdownify(str(featured_image)) + "\n\n" + markdown_content
+
     # Format title and content
     formatted_title = title.replace(" ", "-").lower()
     formatted_content = f"""---
