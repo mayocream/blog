@@ -28,7 +28,7 @@ Changes for CKA and CKAD questions:
 
 These changes have improved the quality of the examination, and it's now a little more complicated to achieve high scores. However, they are still intermediate-level exams. As long as you prepare, passing the exam is easy.
 
-The biggest problem with the exam is that you have to clean your desktop, and you cannot put non-decorated things on it. It means that there are no books, notes, and files on the desktop, no scanner, and no anime figures :L
+The biggest problem with the exam is that you have to clean your desktop, and you cannot put non-decorated things on it. It means that there are no books, notes, and files on the desktop, no scanner, and no anime figurines :L
 
 "Let's become Kubestronaut" event
 ---------------------------------
