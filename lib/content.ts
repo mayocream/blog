@@ -21,7 +21,7 @@ export async function getPosts() {
         if (draft) continue
 
         // !!! URL encode the slug
-        slug = slug || encodeURIComponent(title.toLowerCase().replace(/\s+/g, '-'))
+        slug = slug || encodeURIComponent(title.toLowerCase().replace(/\s+/g, '-').replace(':', ''))
 
         const frontmatter = file.data
         frontmatter.slug = slug
