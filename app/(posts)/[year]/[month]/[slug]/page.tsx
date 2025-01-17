@@ -20,8 +20,7 @@ export default async function Page({
     }>
 }) {
     const { slug } = await params
-    let { content } = (await getPost(slug))!
-    content = await markdownToHtml(content)
-
-    return <article dangerouslySetInnerHTML={{ __html: content }} />
+    const post = (await getPost(slug))!
+    const html = await markdownToHtml(post.content)
+    return <article dangerouslySetInnerHTML={{ __html: html }} />
 }

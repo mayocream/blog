@@ -1,4 +1,5 @@
 import { getPosts } from '@/lib/content'
+import Link from 'next/link'
 
 export default async function Page() {
     const posts = await getPosts()
@@ -6,7 +7,7 @@ export default async function Page() {
         <ul>
             {posts.map(({ frontmatter }) => (
                 <li key={frontmatter.title}>
-                    <a href={`${frontmatter.permalink}`}>{frontmatter.title}</a>
+                    <Link href={`${frontmatter.permalink}`}>{frontmatter.title}</Link>
                 </li>
             ))}
         </ul>

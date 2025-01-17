@@ -1,5 +1,5 @@
-import matter from "gray-matter"
-import { glob } from "node:fs/promises"
+import matter from 'gray-matter'
+import { glob } from 'node:fs/promises'
 import rehypeStringify from 'rehype-stringify'
 import remarkGfm from 'remark-gfm'
 import remarkParse from 'remark-parse'
@@ -20,6 +20,7 @@ export async function getPosts() {
         let { draft, slug, title, date } = file.data
         if (draft) continue
 
+        // !!! URL encode the slug
         slug = slug || encodeURIComponent(title.toLowerCase().replace(/\s+/g, '-'))
 
         const frontmatter = file.data
@@ -40,7 +41,7 @@ export async function getPosts() {
 
 export async function getPost(slug: string) {
     const posts = await getPosts()
-    return posts.find(post => post.frontmatter.slug == slug)
+    return posts.find((post) => post.frontmatter.slug === slug)
 }
 
 export async function markdownToHtml(content: string) {
