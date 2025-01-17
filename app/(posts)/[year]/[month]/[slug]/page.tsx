@@ -1,17 +1,11 @@
-import { glob } from 'node:fs/promises'
-import matter from 'gray-matter'
+import { getPost, getPosts, markdownToHtml } from '@/lib/content'
 
 export async function generateStaticParams() {
     const params = []
-    for await (const path of glob('content/posts/**/*.md')) {
-        const file = await matter.read(path)
-
-        let { date, title, slug, draft } = file.data
-        if (draft) continue
-
-        slug = slug || title.toLowerCase().replace(/ /g, '-')
-        const [year, month] = date?.toString().split('-')
-        params.push({ year, month, slug })
+    for (const { frontmatter, content } of await getPosts()) {
+        let { date, slug } = frontmatter
+        const [year, month] = String(date).split('-')
+        params.push({ year, month, slug, content })
     }
     return params
 }
@@ -25,13 +19,9 @@ export default async function Page({
         slug: string
     }>
 }) {
-    const { year, month, slug } = await params
-    return (
-        <>
-            <h1>Post</h1>
-            <p>Year: {year}</p>
-            <p>Month: {month}</p>
-            <p>Slug: {slug}</p>
-        </>
-    )
+    const { slug } = await params
+    let { content } = (await getPost(slug))!
+    content = await markdownToHtml(content)
+
+    return <article dangerouslySetInnerHTML={{ __html: content }} />
 }
