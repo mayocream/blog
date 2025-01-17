@@ -2,10 +2,10 @@ import { getPost, getPosts, markdownToHtml } from '@/lib/content'
 
 export async function generateStaticParams() {
     const params = []
-    for (const { frontmatter, content } of await getPosts()) {
-        let { date, slug } = frontmatter
+    for (const { frontmatter } of await getPosts()) {
+        const { date, slug } = frontmatter
         const [year, month] = String(date).split('-')
-        params.push({ year, month, slug, content })
+        params.push({ year, month, slug })
     }
     return params
 }
