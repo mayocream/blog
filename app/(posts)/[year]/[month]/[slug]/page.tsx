@@ -1,5 +1,6 @@
 import Article from '@/components/article'
 import { getPost, getPosts, markdownToHtml } from '@/lib/content'
+import { Metadata } from 'next'
 
 export async function generateStaticParams() {
   const params = []
@@ -9,6 +10,18 @@ export async function generateStaticParams() {
     params.push({ year, month, slug })
   }
   return params
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ year: string; month: string; slug: string }>
+}): Promise<Metadata> {
+  const { slug } = await params
+  const post = (await getPost(slug))!
+  return {
+    title: post.frontmatter.title,
+  }
 }
 
 export default async function Page({
