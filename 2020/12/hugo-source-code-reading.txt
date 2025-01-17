@@ -6,8 +6,902 @@
 9:I[2576,[],"ViewportBoundary"]
 b:I[7614,[],""]
 :HL["/_next/static/css/c3b55921f92a131e.css","style"]
-0:{"P":null,"b":"D7Fxl72EPjsEYXWPEJ9xK","p":"","c":["","2020","12","hugo-source-code-reading"],"i":false,"f":[[["",{"children":["(posts)",{"children":[["year","2020","d"],{"children":[["month","12","d"],{"children":[["slug","hugo-source-code-reading","d"],{"children":["__PAGE__",{}]}]}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/c3b55921f92a131e.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"children":["$","body",null,{"className":"antialiased","children":["$","$L2",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L3",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[],[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]]],"forbidden":"$undefined","unauthorized":"$undefined"}]}]}]]}],{"children":["(posts)",["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","segmentPath":["children","(posts)","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L3",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[],[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:style","children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:children:props:children:1:props:style","children":404}],["$","div",null,{"style":"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:children:props:children:2:props:style","children":["$","h2",null,{"style":"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:children:props:children:2:props:children:props:style","children":"This page could not be found."}]}]]}]}]]],"forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":[["year","2020","d"],["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","segmentPath":["children","(posts)","children","$0:f:0:1:2:children:2:children:0","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L3",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":[["month","12","d"],["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","segmentPath":["children","(posts)","children","$0:f:0:1:2:children:2:children:0","children","$0:f:0:1:2:children:2:children:2:children:0","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L3",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":[["slug","hugo-source-code-reading","d"],["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","segmentPath":["children","(posts)","children","$0:f:0:1:2:children:2:children:0","children","$0:f:0:1:2:children:2:children:2:children:0","children","$0:f:0:1:2:children:2:children:2:children:2:children:0","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L3",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":["__PAGE__",["$","$1","c",{"children":["$L4",null,["$","$L5",null,{"children":"$L6"}]]}],{},null,false]},null,false]},null,false]},null,false]},null,false]},null,false],["$","$1","h",{"children":[null,["$","$1","NQr-WHYiEyDVssieWL9Uq",{"children":[["$","$L7",null,{"children":"$L8"}],["$","$L9",null,{"children":"$La"}],null]}]]}],false]],"m":"$undefined","G":["$b","$undefined"],"s":false,"S":true}
-4:[["$","h1",null,{"children":"Post"}],["$","p",null,{"children":["Year: ","2020"]}],["$","p",null,{"children":["Month: ","12"]}],["$","p",null,{"children":["Slug: ","hugo-source-code-reading"]}]]
+0:{"P":null,"b":"n66w3jQXdD0TOkFlxRfSe","p":"","c":["","2020","12","hugo-source-code-reading"],"i":false,"f":[[["",{"children":["(posts)",{"children":[["year","2020","d"],{"children":[["month","12","d"],{"children":[["slug","hugo-source-code-reading","d"],{"children":["__PAGE__",{}]}]}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/c3b55921f92a131e.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"children":["$","body",null,{"className":"antialiased","children":["$","$L2",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L3",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[],[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]]],"forbidden":"$undefined","unauthorized":"$undefined"}]}]}]]}],{"children":["(posts)",["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","segmentPath":["children","(posts)","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L3",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[],[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:style","children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:children:props:children:1:props:style","children":404}],["$","div",null,{"style":"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:children:props:children:2:props:style","children":["$","h2",null,{"style":"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:children:props:children:2:props:children:props:style","children":"This page could not be found."}]}]]}]}]]],"forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":[["year","2020","d"],["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","segmentPath":["children","(posts)","children","$0:f:0:1:2:children:2:children:0","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L3",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":[["month","12","d"],["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","segmentPath":["children","(posts)","children","$0:f:0:1:2:children:2:children:0","children","$0:f:0:1:2:children:2:children:2:children:0","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L3",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":[["slug","hugo-source-code-reading","d"],["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","segmentPath":["children","(posts)","children","$0:f:0:1:2:children:2:children:0","children","$0:f:0:1:2:children:2:children:2:children:0","children","$0:f:0:1:2:children:2:children:2:children:2:children:0","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L3",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":["__PAGE__",["$","$1","c",{"children":["$L4",null,["$","$L5",null,{"children":"$L6"}]]}],{},null,false]},null,false]},null,false]},null,false]},null,false]},null,false],["$","$1","h",{"children":[null,["$","$1","75xEPbe_eIvxZtHlxQnX8",{"children":[["$","$L7",null,{"children":"$L8"}],["$","$L9",null,{"children":"$La"}],null]}]]}],false]],"m":"$undefined","G":["$b","$undefined"],"s":false,"S":true}
 a:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
 8:[["$","meta","0",{"charSet":"utf-8"}],["$","title","1",{"children":"Mayo Rocks!"}],["$","meta","2",{"name":"description","content":"Mayo's Blog"}],["$","link","3",{"rel":"icon","href":"/icon.png?14d5a92fbe70e82a","type":"image/png","sizes":"460x460"}]]
 6:null
+c:T6348,<p>这篇源码阅读编写于 2020 年 12 月，原本出于自己想实现一个 Go 语言的静态博客生成器，开始阅读 Hugo 的源码，了解一些实现的细节与需要注意的地方，途中发现代码量巨大，而且内部实现逻辑较为复杂，在这里也只对部分逻辑进行了梳理（只是冰山一角）。</p>
+<h2>1. 概述</h2>
+<p>我阅读并作出中文注释的 Commits 可以在这里看到：
+<a href="https://github.com/mayocream/hugo/commits?author=mayocream">https://github.com/mayocream/hugo/commits?author=mayocream</a></p>
+<p>阅读源码的过程中也当 typofix 机器人提了 <a href="https://github.com/gohugoio/hugo/pull/8034">PR</a>，毕竟自己确实没有能贡献的地方。不过阅读源码并注释帮助理解，方便整理也是一个好习惯，在工作中我逐渐学会了。</p>
+<p>根据 <a href="https://en.wikipedia.org/wiki/Hugo_(software)">Wikipedia</a> 的记载，Hugo 早在 2013 年就发布了，直到去年我一直没有使用过，可能是它没有官方的中文文档，Go 语言对当时我也太生疏，而且 Hugo 的模板语法和 Hexo 与 Jekyll 也不一样，而且官方推荐用 Theme 的方式是 Git Submodule，相比于 Hexo 上手难度还是高一些。</p>
+<p>现在作为使用者来说，Hugo 使用的 Go 模板语法很好用，Hugo 基于模板的 Pipeline 实现的数据预处理也非常方便，用了就停不下来了。而且基于 <a href="https://github.com/evanw/esbuild">esbuild</a> 的打包使得静态资源的构建也很方便，终于脱离 Webpack 了。我还有一个弃坑的项目 <a href="https://github.com/mayocream/material-design-blog">material-design-blog</a> 也是使用的 Snowpack (esbuild) 进行静态资源的打包，不知道都已经是 2021 年末了，为什么公司的那群人还要使用 Webpack 缓慢地构建呢。</p>
+<p>Hugo 现在基本上 Github 上开源项目文档发布的标配，不过 Cloudflare 的开发者文档是使用 <a href="https://www.gatsbyjs.com/">Gatsby</a> 发布的，可能 Cloudflare 内部 JavaScript 用得也多吧，Worker 对于 Go 就<a href="https://community.cloudflare.com/t/native-golang-support-for-workers/65896">没有原生支持</a>。</p>
+<p>在使用过程中我还是尽量克制自己使用 Hugo <a href="https://gohugo.io/content-management/shortcodes/">Shortcodes</a>，一个 Markdown 文档应该保持纯净，除了 Markdown 扩展语法以外都不要使用，需要特殊实现的也使用原生 HTML 标签，这样方便将写作和 Blog 发布分离。</p>
+<p>我自己用在 <a href="https://github.com/mayocream/Translations">Translations</a> 项目中的 Hugo 的 Shortcode 是：</p>
+<pre><code class="language-html">&#x3C;figure class="manga">
+    &#x3C;img src="https://cdn.jsdelivr.net/gh/mayocream/Translations@gh-pages/raw/{{ .Get "src" }}" alt="" loading="lazy">
+    &#x3C;figcaption>{{ .Get "alt" }}&#x3C;/figcaption>
+&#x3C;/figure>
+</code></pre>
+<p>为了利用上 Figure 标签与 jsDelivr 的 CDN，使用了 Shortcode，不过该项目中采用 Hugo 是专门为了进行发布管理的，关于这个如果我还有时间做更多翻译的话，可能会写一篇文章来介绍翻译小工程的工作流 🤹。</p>
+<h3>1.1. 目录结构</h3>
+<p>Hugo 的开发时间较早，所以目录结构较为分散，与 <a href="https://github.com/golang-standards/project-layout">Standard Go Project Layout</a> 差异较大，当然这个社区提出的目录规范建议，也存在着争议，不过 Google 的不少项目都是遵循这个规范的，例如 <a href="https://github.com/kubernetes/kubernetes">Kubernetes</a> 和 <a href="https://github.com/grpc/grpc-go">grpc-go</a>。</p>
+<pre><code class="language-bash">$ tree -L 1 -d
+.
+├── commands   // CLI 入口, 解析 flags
+├── common     // 工具类
+├── hugofs     // FS 封装, 基于 afero/fs
+├── hugolib    // 程序主逻辑
+├── lazy       // 懒加载工具包
+├── livereload // Live 预览, 基于 Service Worker
+├── markup     // Markdown 解析相关
+├── parser     // 解析文件头
+...
+
+40 directories
+</code></pre>
+<h2>2. 程序流程</h2>
+<h3>2.1. 流程定义</h3>
+<h4>2.1.1. 错误状态码</h4>
+<pre><code class="language-go">func main() {
+	resp := commands.Execute(os.Args[1:])
+
+	if resp.Err != nil {
+		if resp.IsUserError() {
+			resp.Cmd.Println("")
+			resp.Cmd.Println(resp.Cmd.UsageString())
+		}
+		os.Exit(-1)
+	}
+}
+</code></pre>
+<p><code>os.Exit(-1)</code> 程序的退出状态码不在 0~255 之间，会自动做转换，转换的规则如下<sup><a href="#user-content-fn-1" id="user-content-fnref-1" data-footnote-ref aria-describedby="footnote-label">1</a></sup>：</p>
+<ul>
+<li>当指定的退出时状态码为负数:</li>
+</ul>
+<pre><code class="language-fallback">256 - (|code| % 256)
+</code></pre>
+<ul>
+<li>当指定的退出时状态码为正数:</li>
+</ul>
+<pre><code class="language-fallback">code % 256
+</code></pre>
+<p>由此程序退出的状态码为 255。</p>
+<h4>2.1.2. CLI 命令</h4>
+<pre><code class="language-go">// commands/commands.go
+func (b *commandsBuilder) addAll() *commandsBuilder {
+   b.addCommands(
+      b.newServerCmd(),
+      newVersionCmd(),
+      newEnvCmd(),
+      b.newConfigCmd(),
+      newCheckCmd(),
+      b.newDeployCmd(),
+      b.newConvertCmd(),
+      b.newNewCmd(),
+      b.newListCmd(),
+      newImportCmd(),
+      newGenCmd(),
+      createReleaser(),
+      b.newModCmd(),
+   )
+
+   return b
+}
+</code></pre>
+<p>所有的 cmd handler 继承自 basecmd，实现了 cmder 接口：</p>
+<pre><code class="language-go">// commands/helpers.go
+type cmder interface {
+	flagsToConfig(cfg config.Provider)
+	getCommand() *cobra.Command
+}
+</code></pre>
+<p><img src="/images/2020-12-01-02.png" alt=""></p>
+<pre><code class="language-go">// commands/commands.go
+func (b *commandsBuilder) addAll() *commandsBuilder {
+	b.addCommands(
+		b.newServerCmd(),
+		newVersionCmd(),
+		newEnvCmd(),
+		b.newConfigCmd(),
+		newCheckCmd(),
+		b.newDeployCmd(),
+		b.newConvertCmd(),
+		b.newNewCmd(),
+		b.newListCmd(),
+		newImportCmd(),
+		newGenCmd(),
+		createReleaser(),
+		b.newModCmd(),
+	)
+
+	return b
+}
+
+func (b *commandsBuilder) build() *hugoCmd {
+	// 添加主 hugo 命令
+	h := b.newHugoCmd()
+	// 将命令数组添加进 cobra 的 Root Command 中, 作为子命令
+	addCommands(h.getCommand(), b.commands...)
+	return h
+}
+</code></pre>
+<h3>2.2. 渲染初始化</h3>
+<blockquote>
+<p>执行 Hugo 命令时进行的初始化加载</p>
+</blockquote>
+<pre><code class="language-go">// 创建 hugoCmd 封装块
+func (b *commandsBuilder) newHugoCmd() *hugoCmd {
+	cc := &#x26;hugoCmd{}
+
+	cc.baseBuilderCmd = b.newBuilderCmd(&#x26;cobra.Command{
+		Use:   "hugo",
+		Short: "hugo builds your site",
+		Long: `hugo is the main command, used to build your Hugo site.
+
+Hugo is a Fast and Flexible Static Site Generator
+built with love by spf13 and friends in Go.
+
+Complete documentation is available at http://gohugo.io/.`,
+
+		// 执行渲染操作
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// 记录全局操作耗时
+			defer cc.timeTrack(time.Now(), "Total")
+			cfgInit := func(c *commandeer) error {
+				if cc.buildWatch {
+					// 如果开启了 watch 模式则关闭动态重载
+					c.Set("disableLiveReload", true)
+				}
+				return nil
+			}
+
+			// 初始化配置
+			c, err := initializeConfig(true, cc.buildWatch, &#x26;cc.hugoBuilderCommon, cc, cfgInit)
+			if err != nil {
+				return err
+			}
+			cc.c = c
+
+			// 编译操作
+			return c.build()
+		},
+	})
+
+    ...
+</code></pre>
+<h4>2.2.1. 配置文件加载</h4>
+<pre><code class="language-go">// hugolib/config.go
+
+	for _, configDir := range configDirs {
+		err := afero.Walk(sourceFs, configDir, func(path string, fi os.FileInfo, err error) error {
+			if fi == nil || err != nil {
+				return nil
+			}
+
+			if fi.IsDir() {
+				dirnames = append(dirnames, path)
+				return nil
+			}
+
+			// 检查文件后缀是否是支持的格式
+			if !config.IsValidConfigFilename(path) {
+				return nil
+			}
+
+			// 文件名, 移除文件后缀
+			name := helpers.Filename(filepath.Base(path))
+
+			// 加载文件内容到 map
+			item, err := metadecoders.Default.UnmarshalFileToMap(sourceFs, path)
+			if err != nil {
+				return l.wrapFileError(err, path)
+			}
+
+			var keyPath []string
+
+			// 如果不是 hugo 的 config 文件
+			if name != "config" {
+				// Can be params.jp, menus.en etc.
+				// 如果文件还有后缀, 可能是语言后缀
+				name, lang := helpers.FileAndExtNoDelimiter(name)
+
+				keyPath = []string{name}
+
+				// 如果语言后缀存在
+				if lang != "" {
+					// 填充语言文件夹路径
+					keyPath = []string{"languages", lang}
+					switch name {
+					case "menu", "menus":
+						keyPath = append(keyPath, "menus")
+					case "params":
+						keyPath = append(keyPath, "params")
+					}
+				}
+			}
+
+			root := item
+			if len(keyPath) > 0 {
+				root = make(map[string]interface{})
+				m := root
+
+				// 遍历形成层级关系
+
+				// 遍历语言文件夹的路径
+				// i 从 0 开始
+				for i, key := range keyPath {
+					// 如果 i >= 最后一个元素的 index
+					if i >= len(keyPath)-1 {
+						// 将文件内容填充到 key 下面
+						m[key] = item
+					} else {
+						nm := make(map[string]interface{})
+						m[key] = nm
+						m = nm
+					}
+				}
+			}
+
+			// Migrate menu => menus etc.
+			config.RenameKeys(root)
+
+			// 合并配置文件
+			if err := v.MergeConfigMap(root); err != nil {
+				return l.wrapFileError(err, path)
+			}
+
+			return nil
+		})
+</code></pre>
+<p>遍历配置文件夹、以及加载配置文件（yaml/toml/json 后缀）到 Map 中，使用 Viper 的 <code>MergeConfigMap</code> 载入配置，包含语言、菜单配置。</p>
+<pre><code class="language-go">// hugolib/hugo_sites.go
+// 创建 sites 的配置
+func createSitesFromConfig(cfg deps.DepsCfg) ([]*Site, error) {
+	var sites []*Site
+
+	// 获取多语言配置
+	languages := getLanguages(cfg.Cfg)
+
+	for _, lang := range languages {
+		if lang.Disabled {
+			continue
+		}
+		var s *Site
+		var err error
+		cfg.Language = lang
+		// 为每个语言创建一个 site
+		s, err = newSite(cfg)
+
+		if err != nil {
+			return nil, err
+		}
+
+		sites = append(sites, s)
+	}
+
+	return sites, nil
+}
+</code></pre>
+<p>为每个语言生成一个 Site。</p>
+<h4>2.2.2. 内容加载</h4>
+<p>注册回调函数:</p>
+<pre><code class="language-go">// hugolib/site.go
+// 初始化
+func (s *Site) prepareInits() {
+	s.init = &#x26;siteInit{}
+
+	var init lazy.Init
+
+	// 回调函数
+	s.init.prevNext = init.Branch(func() (interface{}, error) {
+		// 获取 pages
+		regularPages := s.RegularPages()
+		for i, p := range regularPages {
+			np, ok := p.(nextPrevProvider)
+			if !ok {
+				continue
+			}
+
+			pos := np.getNextPrev()
+			if pos == nil {
+				continue
+			}
+
+			pos.nextPage = nil
+			pos.prevPage = nil
+
+			if i > 0 {
+				pos.nextPage = regularPages[i-1]
+			}
+
+			if i &#x3C; len(regularPages)-1 {
+				pos.prevPage = regularPages[i+1]
+			}
+		}
+		return nil, nil
+	})
+
+	s.init.prevNextInSection = init.Branch(func() (interface{}, error) {
+		var sections page.Pages
+		s.home.treeRef.m.collectSectionsRecursiveIncludingSelf(pageMapQuery{Prefix: s.home.treeRef.key}, func(n *contentNode) {
+			sections = append(sections, n.p)
+		})
+
+		setNextPrev := func(pas page.Pages) {
+			for i, p := range pas {
+				np, ok := p.(nextPrevInSectionProvider)
+				if !ok {
+					continue
+				}
+
+				pos := np.getNextPrevInSection()
+				if pos == nil {
+					continue
+				}
+
+				pos.nextPage = nil
+				pos.prevPage = nil
+
+				if i > 0 {
+					pos.nextPage = pas[i-1]
+				}
+
+				if i &#x3C; len(pas)-1 {
+					pos.prevPage = pas[i+1]
+				}
+			}
+		}
+
+		for _, sect := range sections {
+			treeRef := sect.(treeRefProvider).getTreeRef()
+
+			var pas page.Pages
+			treeRef.m.collectPages(pageMapQuery{Prefix: treeRef.key + cmBranchSeparator}, func(c *contentNode) {
+				pas = append(pas, c.p)
+			})
+			page.SortByDefault(pas)
+
+			setNextPrev(pas)
+		}
+
+		// The root section only goes one level down.
+		treeRef := s.home.getTreeRef()
+
+		var pas page.Pages
+		treeRef.m.collectPages(pageMapQuery{Prefix: treeRef.key + cmBranchSeparator}, func(c *contentNode) {
+			pas = append(pas, c.p)
+		})
+		page.SortByDefault(pas)
+
+		setNextPrev(pas)
+
+		return nil, nil
+	})
+
+	s.init.menus = init.Branch(func() (interface{}, error) {
+		s.assembleMenus()
+		return nil, nil
+	})
+
+	s.init.taxonomies = init.Branch(func() (interface{}, error) {
+		err := s.pageMap.assembleTaxonomies()
+		return nil, err
+	})
+}
+</code></pre>
+<h2>3. 性能优化细节</h2>
+<h3>3.1. interface 实现约束</h3>
+<p>代码中有多处使用如下方式在编译时约束 interface 被实现。</p>
+<pre><code class="language-go">var _ cmder = (*newCmd)(nil)
+</code></pre>
+<p>其他开源项目中有也有这种写法的：</p>
+<pre><code class="language-go">var _ cmder = &#x26;newCmd{}
+var _ cmder = newCmd{}
+</code></pre>
+<h3>3.2. 防抖</h3>
+<pre><code class="language-go">package debounce
+
+import (
+	"sync"
+	"time"
+)
+
+// New returns a debounced function that takes another functions as its argument.
+// This function will be called when the debounced function stops being called
+// for the given duration.
+// The debounced function can be invoked with different functions, if needed,
+// the last one will win.
+func New(after time.Duration) func(f func()) {
+	d := &#x26;debouncer{after: after}
+
+	return func(f func()) {
+		d.add(f)
+	}
+}
+
+type debouncer struct {
+	mu    sync.Mutex
+	after time.Duration
+	timer *time.Timer
+}
+
+func (d *debouncer) add(f func()) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+    // 如果正在延时中，取消当前延时，添加新的延时
+	if d.timer != nil {
+		d.timer.Stop()
+	}
+	d.timer = time.AfterFunc(d.after, f)
+}
+</code></pre>
+<p>防抖函数的使用类似 React Hooks。</p>
+<pre><code class="language-go">f := func()
+run := debounce.New(f)
+run()
+</code></pre>
+<p>在 Istio 源码中，处理 XDS 推流时也会进行防抖处理。</p>
+<h3>3.2. LIFO 队列</h3>
+<pre><code class="language-go">// LIFO 队列，溢出的元素会从顶部移除
+// 没有主动删除元素的方法
+// EvictingStringQueue is a queue which automatically evicts elements from the head of
+// the queue when attempting to add new elements onto the queue and it is full.
+// This queue orders elements LIFO (last-in-first-out). It throws away duplicates.
+// Note: This queue currently does not contain any remove (poll etc.) methods.
+type EvictingStringQueue struct {
+	size int
+	vals []string // 储存真实的数据
+	set  map[string]bool // 表示是否已经存在
+	mu   sync.Mutex
+}
+
+// NewEvictingStringQueue creates a new queue with the given size.
+func NewEvictingStringQueue(size int) *EvictingStringQueue {
+	return &#x26;EvictingStringQueue{size: size, set: make(map[string]bool)}
+}
+
+// Add adds a new string to the tail of the queue if it's not already there.
+func (q *EvictingStringQueue) Add(v string) {
+	q.mu.Lock()
+	// 已经存在
+	if q.set[v] {
+		q.mu.Unlock()
+		return
+	}
+
+	// 数量达到最大限制
+	if len(q.set) == q.size {
+		// Full
+		// 移除了 0 号元素的占位符
+		delete(q.set, q.vals[0])
+		// :0 取空数组，1:取不包含第一个元素的其余元素
+		// 移除了数组 0 号元素
+		q.vals = append(q.vals[:0], q.vals[1:]...)
+	}
+	// 表示存在
+	q.set[v] = true
+	// 最新插入的值在数组最后
+	// 是队列结构
+	q.vals = append(q.vals, v)
+	q.mu.Unlock()
+}
+
+// Contains returns whether the queue contains v.
+func (q *EvictingStringQueue) Contains(v string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.set[v]
+}
+
+// Peek looks at the last element added to the queue.
+func (q *EvictingStringQueue) Peek() string {
+	q.mu.Lock()
+	l := len(q.vals)
+	// 处理边界条件
+	if l == 0 {
+		q.mu.Unlock()
+		return ""
+	}
+	// 取最后一个元素
+	elem := q.vals[l-1]
+	q.mu.Unlock()
+	return elem
+}
+
+// PeekAll looks at all the elements in the queue, with the newest first.
+func (q *EvictingStringQueue) PeekAll() []string {
+	q.mu.Lock()
+	vals := make([]string, len(q.vals))
+	copy(vals, q.vals)
+	q.mu.Unlock()
+	// i 从头开始循环 j 从尾循环
+	// 交换 i j 元素位置
+	// 数组 reverse
+	// 最后插入的在最前面
+	for i, j := 0, len(vals)-1; i &#x3C; j; i, j = i+1, j-1 {
+		vals[i], vals[j] = vals[j], vals[i]
+	}
+	return vals
+}
+
+// PeekAllSet returns PeekAll as a set.
+func (q *EvictingStringQueue) PeekAllSet() map[string]bool {
+	all := q.PeekAll()
+	set := make(map[string]bool)
+	for _, v := range all {
+		set[v] = true
+	}
+
+	return set
+}
+</code></pre>
+<h3>3.3. 同步信号量</h3>
+<p><code>golang.org/x/sync/semaphore</code> 扩展同步原语。</p>
+<h3>3.4. Command</h3>
+<h4>3.4.1. CLI 自动补全</h4>
+<p><img src="/images/2020-12-01-01.png" alt=""></p>
+<p>Hugo 的使用方式有两种：</p>
+<pre><code class="language-go">// "-config" flag 自动补全指定后缀文件名
+_ = cc.cmd.PersistentFlags().SetAnnotation("config", cobra.BashCompFilenameExt, config.ValidConfigFileExtensions)
+
+// "-source" flag 自动补全子文件夹名
+cmd.PersistentFlags().SetAnnotation("source", cobra.BashCompSubdirsInDir, []string{})
+</code></pre>
+<h3>3.5. 并发控制</h3>
+<h4>3.5.1. 缓冲通道控制并发</h4>
+<pre><code class="language-go">// common/para/para.go
+// Package para implements parallel execution helpers.
+package para
+
+import (
+	"context"
+
+	"golang.org/x/sync/errgroup"
+)
+
+// Workers configures a task executor with the most number of tasks to be executed in parallel.
+type Workers struct {
+	sem chan struct{}
+}
+
+// Runner wraps the lifecycle methods of a new task set.
+//
+// Run wil block until a worker is available or the context is cancelled,
+// and then run the given func in a new goroutine.
+// Wait will wait for all the running goroutines to finish.
+type Runner interface {
+	Run(func() error)
+	Wait() error
+}
+
+type errGroupRunner struct {
+	*errgroup.Group
+	w   *Workers
+	ctx context.Context
+}
+
+func (g *errGroupRunner) Run(fn func() error) {
+	select {
+	// 分配一个信号, 如果 chan 被关闭则退出
+	case g.w.sem &#x3C;- struct{}{}:
+	case &#x3C;-g.ctx.Done():
+		return
+	}
+
+	g.Go(func() error {
+		err := fn()
+		// 执行完后消费信号量, 通过缓存通道保证并发执行的协程数量
+		&#x3C;-g.w.sem
+		return err
+	})
+}
+
+// New creates a new Workers with the given number of workers.
+func New(numWorkers int) *Workers {
+	return &#x26;Workers{
+		// 缓冲通道, 并发写入
+		sem: make(chan struct{}, numWorkers),
+	}
+}
+
+// Start starts a new Runner.
+func (w *Workers) Start(ctx context.Context) (Runner, context.Context) {
+	g, ctx := errgroup.WithContext(ctx)
+	return &#x26;errGroupRunner{
+		Group: g,
+		ctx:   ctx,
+		w:     w,
+	}, ctx
+}
+
+</code></pre>
+<p>Playground 测试示例: <a href="https://play.golang.org/p/4AJtyVnlSOd">https://play.golang.org/p/4AJtyVnlSOd</a></p>
+<pre><code class="language-go">func main() {
+	w := para.New(10)
+	runner, _ := w.Start(context.TODO())
+	runner.Run(func() error {
+		fmt.Println("fucking")
+		return nil
+	})
+	time.Sleep(2 * time.Second)
+}
+</code></pre>
+<h3>3.6. 懒加载</h3>
+<blockquote>
+<p>Lazy 包</p>
+</blockquote>
+<h4>3.6.1. onceMore</h4>
+<pre><code class="language-go">package lazy
+
+import (
+	"sync"
+	"sync/atomic"
+)
+
+// onceMore is similar to sync.Once.
+//
+// Additional features are:
+// * it can be reset, so the action can be repeated if needed
+// * it has methods to check if it's done or in progress
+//
+type onceMore struct {
+	mu   sync.Mutex
+	lock uint32
+	done uint32
+}
+
+func (t *onceMore) Do(f func()) {
+	if atomic.LoadUint32(&#x26;t.done) == 1 {
+		return
+	}
+
+	// f may call this Do and we would get a deadlock.
+	locked := atomic.CompareAndSwapUint32(&#x26;t.lock, 0, 1)
+	if !locked {
+		// 没有抢到原子操作
+		return
+	}
+	// 释放原子锁
+	// defer 是 FILO, 该原子锁会最后才释放
+	defer atomic.StoreUint32(&#x26;t.lock, 0)
+
+	// 并发锁, 保证 t.done 值的读取不会产生竞争
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Double check
+	if t.done == 1 {
+		return
+	}
+	defer atomic.StoreUint32(&#x26;t.done, 1)
+	f()
+}
+
+func (t *onceMore) InProgress() bool {
+	return atomic.LoadUint32(&#x26;t.lock) == 1
+}
+
+func (t *onceMore) Done() bool {
+	return atomic.LoadUint32(&#x26;t.done) == 1
+}
+
+func (t *onceMore) ResetWithLock() *sync.Mutex {
+	t.mu.Lock()
+	defer atomic.StoreUint32(&#x26;t.done, 0)
+	return &#x26;t.mu
+}
+
+</code></pre>
+<h4>3.6.2. init</h4>
+<pre><code class="language-go">package lazy
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/pkg/errors"
+)
+
+// New creates a new empty Init.
+func New() *Init {
+	return &#x26;Init{}
+}
+
+// Init holds a graph of lazily initialized dependencies.
+type Init struct {
+	mu sync.Mutex // 并发修改图的锁
+
+	prev     *Init
+	children []*Init
+
+	init onceMore // 保证只执行一次的锁
+	out  interface{} // 执行结果
+	err  error // 执行错误
+	f    func() (interface{}, error) // 回调函数
+}
+
+// Add adds a func as a new child dependency.
+func (ini *Init) Add(initFn func() (interface{}, error)) *Init {
+	if ini == nil {
+		ini = New()
+	}
+	return ini.add(false, initFn)
+}
+
+// AddWithTimeout is same as Add, but with a timeout that aborts initialization.
+func (ini *Init) AddWithTimeout(timeout time.Duration, f func(ctx context.Context) (interface{}, error)) *Init {
+	return ini.Add(func() (interface{}, error) {
+		return ini.withTimeout(timeout, f)
+	})
+}
+
+// Branch creates a new dependency branch based on an existing and adds
+// the given dependency as a child.
+func (ini *Init) Branch(initFn func() (interface{}, error)) *Init {
+	if ini == nil {
+		ini = New()
+	}
+	return ini.add(true, initFn)
+}
+
+// BranchdWithTimeout is same as Branch, but with a timeout.
+func (ini *Init) BranchWithTimeout(timeout time.Duration, f func(ctx context.Context) (interface{}, error)) *Init {
+	return ini.Branch(func() (interface{}, error) {
+		return ini.withTimeout(timeout, f)
+	})
+}
+
+// Do initializes the entire dependency graph.
+func (ini *Init) Do() (interface{}, error) {
+	if ini == nil {
+		panic("init is nil")
+	}
+
+	// 调用 onceMore 库保证只执行一次
+	ini.init.Do(func() {
+		// 获取父节点
+		prev := ini.prev
+		if prev != nil {
+			// A branch. Initialize the ancestors.
+			// 若父节点还没有完成初始化, 并且没有正在执行的回调函数, 执行
+			if prev.shouldInitialize() {
+				_, err := prev.Do()
+				if err != nil {
+					ini.err = err
+					return
+				}
+			} else if prev.inProgress() {
+				// Concurrent initialization. The following init func
+				// may depend on earlier state, so wait.
+				// 等待一定时间, 若没有执行完, panic
+				prev.wait()
+			}
+		}
+
+		// 执行回调函数
+		if ini.f != nil {
+			ini.out, ini.err = ini.f()
+		}
+
+		// 循环执行子节点的回调函数
+		// 为什么不并发执行 ?
+		for _, child := range ini.children {
+			if child.shouldInitialize() {
+				_, err := child.Do()
+				if err != nil {
+					ini.err = err
+					return
+				}
+			}
+		}
+	})
+
+	ini.wait()
+
+	return ini.out, ini.err
+}
+
+// TODO(bep) investigate if we can use sync.Cond for this.
+func (ini *Init) wait() {
+	var counter time.Duration
+	for !ini.init.Done() {
+		counter += 10
+		if counter > 600000000 {
+			panic("BUG: timed out in lazy init")
+		}
+		time.Sleep(counter * time.Microsecond)
+	}
+}
+
+func (ini *Init) inProgress() bool {
+	return ini != nil &#x26;&#x26; ini.init.InProgress()
+}
+
+// 若 没有注册了回调函数 | 已经完成 | 正在执行, 不进行初始化
+func (ini *Init) shouldInitialize() bool {
+	return !(ini == nil || ini.init.Done() || ini.init.InProgress())
+}
+
+// Reset resets the current and all its dependencies.
+func (ini *Init) Reset() {
+	mu := ini.init.ResetWithLock()
+	defer mu.Unlock()
+	for _, d := range ini.children {
+		d.Reset()
+	}
+}
+
+// 添加图的节点
+func (ini *Init) add(branch bool, initFn func() (interface{}, error)) *Init {
+	ini.mu.Lock()
+	defer ini.mu.Unlock()
+
+	// 如果是新建分支
+	if branch {
+		return &#x26;Init{
+			f:    initFn,
+			prev: ini, // 父节点
+		}
+	}
+
+	// 如果是添加子节点
+	// 如果已经被执行, panic
+	ini.checkDone()
+	// 添加子节点
+	ini.children = append(ini.children, &#x26;Init{
+		f: initFn,
+	})
+
+	// 释放锁
+	return ini
+}
+
+func (ini *Init) checkDone() {
+	if ini.init.Done() {
+		panic("init cannot be added to after it has run")
+	}
+}
+
+// callback 函数, 有超时时间
+func (ini *Init) withTimeout(timeout time.Duration, f func(ctx context.Context) (interface{}, error)) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	// 缓存通道, 防止阻塞
+	c := make(chan verr, 1)
+
+	go func() {
+		v, err := f(ctx)
+		select {
+		case &#x3C;-ctx.Done():
+			return
+		default:
+			c &#x3C;- verr{v: v, err: err}
+		}
+	}()
+
+	select {
+	case &#x3C;-ctx.Done():
+		return nil, errors.New("timed out initializing value. You may have a circular loop in a shortcode, or your site may have resources that take longer to build than the `timeout` limit in your Hugo config file.")
+	case ve := &#x3C;-c:
+		return ve.v, ve.err
+	}
+}
+
+type verr struct {
+	v   interface{}
+	err error
+}
+
+</code></pre>
+<section data-footnotes class="footnotes"><h2 class="sr-only" id="footnote-label">Footnotes</h2>
+<ol>
+<li id="user-content-fn-1">
+<p><a href="https://imroc.io/posts/kubernetes/analysis-exitcode/">Kubernetes 问题定位技巧：分析 ExitCode - imroc.io|roc的博客|Cloud Native|Kubernetes|Go|Golang</a> <a href="#user-content-fnref-1" data-footnote-backref="" aria-label="Back to reference 1" class="data-footnote-backref">↩</a></p>
+</li>
+</ol>
+</section>4:["$","article",null,{"dangerouslySetInnerHTML":{"__html":"$c"}}]

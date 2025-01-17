@@ -1,0 +1,1846 @@
+<!DOCTYPE html><html><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/css/c3b55921f92a131e.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/webpack-072f062dc024cc52.js"/><script src="/_next/static/chunks/f4f1b8d9-0107da81548bf985.js" async=""></script><script src="/_next/static/chunks/435-d305dd8b5fb158de.js" async=""></script><script src="/_next/static/chunks/main-app-3958e659bb0a464b.js" async=""></script><title>Mayo Rocks!</title><meta name="description" content="Mayo&#x27;s Blog"/><link rel="icon" href="/icon.png?14d5a92fbe70e82a" type="image/png" sizes="460x460"/><script src="/_next/static/chunks/polyfills-42372ed130431b0a.js" noModule=""></script></head><body class="antialiased"><article><h2>1. 概述</h2>
+<h3>1.1. 项目简介</h3>
+<p><em>cfssl</em> 是 Cloudflare 的 PKI，也是证书生成的工具链。<em>cfssl</em> 作为证书生成的工具链可能更为人熟知，Google 上搜索到的关于 <em>cfssl</em> 的介绍以及使用都是关于使用 CLI 生成自签名证书的，几乎没有针对 <em>cfssl</em> 作为 CA 中心的介绍。</p>
+<p>从 commit 历史来看这是一个 7 年前就启动的项目，项目中的文档大部分还是 <em>.txt</em> 后缀的纯文本。但是项目的完成度很高，内部 CA 实现了多层级，能够引入外部 CA，包括提供了调用 CA API 的 Go 的 Client 包，以及用于证书轮换的 KeyProvider package。</p>
+<p>以及有 Cloudflare 官方的 certmgr 项目，用于在 K8s 集群中使用 cfssl 自动签发证书，该项目描述中提到在 CF 的生成环境使用。说到此处本人想到 CF 在其域名托管的服务中有免费 TLS 证书生成，包含 Origin、Browser 证书，或许是使用该项目进行生成的。</p>
+<p>但是项目更新速度比较慢，本人提的 2 个 Pull Request 等了一周只被合并了一个，另一个 feature 类型的 PR 还在等待审核。</p>
+<p><em>Istio</em> 最开始也是使用 <em>cfssl</em> 生成自签名 CA 证书，但是由于 <em>Istio</em> 内部需要实现 SDS 协议、兼容 SPIFFE ID 标准，在后续的迭代中使用了自己的 PKI 将其替换了。</p>
+<p><em>cfssl</em> 官方 master 分支的代码不能完全满足我们的需求，例如不兼容 SAN URI 字段的证书签发，证书轮换客户端使用过于繁琐……但是基于 <em>cfssl</em> 我们能够快速实现一个业界标准的，完备的 PKI、CA 中心。</p>
+<h3>1.2. 项目结构</h3>
+<p><em>cfssl</em> 由一组组工具包组成，功能较为独立，因此也能够方便的从其他项目引用这些包。</p>
+<pre><code class="language-bash">$ tree -d -L 1 -A
+.
+├── api
+├── auth
+├── bundler
+├── certdb
+├── certinfo
+├── cli
+├── cmd
+├── config
+├── crl
+├── crypto
+├── csr
+├── doc
+├── errors
+├── helpers
+├── info
+├── initca
+├── log
+├── multiroot
+├── ocsp
+├── revoke
+├── scan
+├── selfsign
+├── signer
+├── testdata
+├── transport
+├── ubiquity
+├── vendor
+└── whitelist
+
+28 directories
+</code></pre>
+<h2>2. 源码分析</h2>
+<p>由于市面上的 Golang PKI 程序目录结构都是一个个包组成的，例如 <a href="https://github.com/letsencrypt/boulder">letsencrypt/boulder</a> 项目，这里通过流程分析更清晰。</p>
+<h3>2.0. 架构设计</h3>
+<h4>2.0.1. Profiles</h4>
+<p><em>cfssl</em> 的配置以 <em>profile</em> 区分，这里看一个<strong>CA 中心</strong>示例配置：</p>
+<pre><code class="language-json">{
+  "signing": {
+    "default": {
+      "expiry": "168h"
+    },
+    "profiles": {
+      "client": {
+        "expiry": "1h",
+        "usages": [
+          "signing",
+          "key encipherment",
+          "client auth"
+        ]
+      },
+      "server": {
+        "expiry": "1h",
+        "usages": [
+          "signing",
+          "key encipherment",
+          "server auth"
+        ]
+      }
+    }
+  }
+}
+</code></pre>
+<p>根据 profile name 区分不同的签名类型。</p>
+<p>我们再来看通过 SDK 连接 CA 中心的配置文件：</p>
+<pre><code class="language-json">{
+  "request": {
+    "CN": "test server",
+    "hosts": [
+      "127.0.0.1"
+    ]
+  },
+  "profiles": {
+    "paths": {
+      "private_key": "server.key",
+      "certificate": "server.pem"
+    },
+    "cfssl": {
+      "profile": "server",
+      "remote": "127.0.0.1:8888"
+    }
+  },
+  "roots": [
+    {
+      "type": "system"
+    }
+  ],
+  "client_roots": [
+    {
+      "type": "cfssl",
+      "metadata": {
+        "host": "127.0.0.1:8888",
+        "profile": "client"
+      }
+    }
+  ]
+}
+
+</code></pre>
+<p>CA 中心会根据 profile 不同，使用不同的配置去处理请求、签发证书。</p>
+<h4>2.0.2. 认证体系</h4>
+<p><em>cfssl</em> 支持使用 mTLS，以及 Auth Key 来进行身份验证。</p>
+<p>其中 Auth Key 支持 <code>standard</code> 和 <code>standard-ip</code> 两种类型。</p>
+<p>CA 中心配置示例：</p>
+<pre><code class="language-json">{
+  "auth_keys": {
+    "client": {
+      "type": "standard",
+      "key": "52abb3ac91971bb72bce17e7a289cd04476490b19e0d8eb7810dc42d4ac16c41"
+    },
+    "server": {
+      "type": "standard",
+      "key": "4f4f26686209f672e0ec7b19cbbc8b6d94fdd12cc0b20326f9005d5f234e6e3e"
+    }
+  },
+  "signing": {
+    "default": {
+      "expiry": "168h"
+    },
+    "profiles": {
+      "client": {
+        "auth_key": "client",
+        "expiry": "1h",
+        "usages": [
+          "signing",
+          "key encipherment",
+          "client auth"
+        ]
+      },
+      "server": {
+        "auth_key": "server",
+        "expiry": "8760h",
+        "usages": [
+          "signing",
+          "key encipherment",
+          "server auth"
+        ]
+      }
+    }
+  }
+}
+
+</code></pre>
+<p>SDK 客户端配置示例：</p>
+<pre><code class="language-json">{
+  "request": {
+    "CN": "test server",
+    "hosts": ["127.0.0.1"]
+  },
+  "profiles": {
+    "paths": {
+      "private_key": "server.key",
+      "certificate": "server.pem"
+    },
+    "cfssl": {
+      "profile": "server",
+      "remote": "127.0.0.1:8888",
+      "auth-type": "standard",
+      "auth-key": "4f4f26686209f672e0ec7b19cbbc8b6d94fdd12cc0b20326f9005d5f234e6e3e"
+    }
+  },
+  "roots": [{
+    "type": "system"
+  }],
+  "client_roots": [{
+    "type": "cfssl",
+    "metadata": {
+      "host": "127.0.0.1:8888",
+      "profile": "client"
+    }
+  }]
+}
+</code></pre>
+<h3>2.1. 证书管理</h3>
+<p>我们从一组官方给出的示例 shell 当作入口来看：</p>
+<pre><code class="language-bash">#!/bin/sh
+
+cfssl gencert -initca ca.json | cfssljson -bare ca
+</code></pre>
+<p><code>ca.json</code> 文件内容：</p>
+<pre><code class="language-json">{
+  "hosts": [
+    "dropsonde.net"
+  ],
+  "key": {
+    "algo": "rsa",
+    "size": 4096
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "San Francisco",
+      "OU": "Dropsonde Certificate Authority",
+      "ST": "California"
+    }
+  ]
+}
+</code></pre>
+<p><code>cfssl gencert</code> 命令注释：</p>
+<pre><code class="language-go">var gencertUsageText = `cfssl gencert -- generate a new key and signed certificate
+
+Usage of gencert:
+    Generate a new key and cert from CSR:
+        cfssl gencert -initca CSRJSON
+        cfssl gencert -ca cert -ca-key key [-config config] [-profile profile] [-hostname hostname] CSRJSON
+        cfssl gencert -remote remote_host [-config config] [-profile profile] [-label label] [-hostname hostname] CSRJSON
+
+    Re-generate a CA cert with the CA key and CSR:
+        cfssl gencert -initca -ca-key key CSRJSON
+
+    Re-generate a CA cert with the CA key and certificate:
+        cfssl gencert -renewca -ca cert -ca-key key
+
+Arguments:
+        CSRJSON:    JSON file containing the request, use '-' for reading JSON from stdin
+
+Flags:
+`
+</code></pre>
+<h4>2.1.1. 生成私钥</h4>
+<p><code>-initca</code> 参数表示是 CA。</p>
+<pre><code class="language-go">// cli/gencert/gencert.go
+
+// 创建默认 CSR 请求
+req := csr.CertificateRequest{
+   // 默认使用 ecdsa, 256 生成 private key
+   KeyRequest: csr.NewKeyRequest(),
+}
+</code></pre>
+<p><em>cfssl</em> 中默认使用 ECDSA with <em>curve P-256</em> 算法生成私钥。</p>
+<p>以下摘自 <a href="https://tools.ietf.org/html/rfc6605">rfc6605</a> (Elliptic Curve Digital Signature Algorithm (DSA) for DNSSEC)</p>
+<blockquote>
+<p>Current estimates are that ECDSA with curve P-256 has an approximate
+equivalent strength to RSA with 3072-bit keys.  Using ECDSA with
+curve P-256 in DNSSEC has some advantages and disadvantages relative
+to using RSA with SHA-256 and with 3072-bit keys.  ECDSA keys are
+much shorter than RSA keys; at this size, the difference is 256
+versus 3072 bits.  Similarly, ECDSA signatures are much shorter than
+RSA signatures.  This is relevant because DNSSEC stores and transmits
+both keys and signatures.</p>
+</blockquote>
+<p>In the two signing algorithms defined in this document, the size of
+the key for the elliptic curve is matched with the size of the output
+of the hash algorithm.  This design is based on the widespread belief
+that the equivalent strength of P-256 and P-384 is half the length of
+the key, and also that the equivalent strength of SHA-256 and SHA-384
+is half the length of the key.  Using matched strengths prevents an
+attacker from choosing the weaker half of a signature algorithm.  For
+example, in a signature that uses RSA with 2048-bit keys and SHA-256,
+the signing portion is significantly weaker than the hash portion,
+whereas the two algorithms here are balanced.</p>
+<p>Signing with ECDSA is significantly faster than with RSA (over 20
+times in some implementations).  However, validating RSA signatures
+is significantly faster than validating ECDSA signatures (about 5
+times faster in some implementations).</p>
+<p>ECDSA with curve P-256 与 RSA with SHA-256 强度相当；前者签名速度快于后者，后者验证速度快于前者。</p>
+<pre><code class="language-go">// csr/csr.go
+
+// Generate generates a key as specified in the request. Currently,
+// only ECDSA and RSA are supported.
+func (kr *KeyRequest) Generate() (crypto.PrivateKey, error) {
+	log.Debugf("generate key from request: algo=%s, size=%d", kr.Algo(), kr.Size())
+	switch kr.Algo() {
+	case "rsa":
+		if kr.Size() &#x3C; 2048 {
+			return nil, errors.New("RSA key is too weak")
+		}
+		if kr.Size() > 8192 {
+			return nil, errors.New("RSA key size too large")
+		}
+		return rsa.GenerateKey(rand.Reader, kr.Size())
+	case "ecdsa":
+		var curve elliptic.Curve
+		switch kr.Size() {
+		case curveP256:
+			curve = elliptic.P256()
+		case curveP384:
+			curve = elliptic.P384()
+		case curveP521:
+			curve = elliptic.P521()
+		default:
+			return nil, errors.New("invalid curve")
+		}
+		// 调用官方包生成私钥
+		return ecdsa.GenerateKey(curve, rand.Reader)
+	default:
+		return nil, errors.New("invalid algorithm")
+	}
+}
+</code></pre>
+<p>私钥转换为 PEM 格式：</p>
+<pre><code class="language-go">// csr/csr.go
+
+	// 私钥转换成 pem 格式
+	switch priv := priv.(type) {
+	case *rsa.PrivateKey:
+		key = x509.MarshalPKCS1PrivateKey(priv)
+		block := pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: key,
+		}
+		key = pem.EncodeToMemory(&#x26;block)
+	case *ecdsa.PrivateKey:
+		key, err = x509.MarshalECPrivateKey(priv)
+		if err != nil {
+			err = cferr.Wrap(cferr.PrivateKeyError, cferr.Unknown, err)
+			return
+		}
+		block := pem.Block{
+			Type:  "EC PRIVATE KEY",
+			Bytes: key,
+		}
+		key = pem.EncodeToMemory(&#x26;block)
+</code></pre>
+<h4>2.1.2. 生成 CSR</h4>
+<p><code>csr, err = Generate(priv.(crypto.Signer), req)</code></p>
+<pre><code class="language-go">// 根据私钥和请求参数生成标准 CSR
+// Generate creates a new CSR from a CertificateRequest structure and
+// an existing key. The KeyRequest field is ignored.
+func Generate(priv crypto.Signer, req *CertificateRequest) (csr []byte, err error) {
+	// 获取 x509 签名算法
+	sigAlgo := helpers.SignerAlgo(priv)
+	if sigAlgo == x509.UnknownSignatureAlgorithm {
+		return nil, cferr.New(cferr.PrivateKeyError, cferr.Unavailable)
+	}
+
+	// csr 模板
+	var tpl = x509.CertificateRequest{
+		Subject:            req.Name(), // 填充 subject 字段
+		SignatureAlgorithm: sigAlgo,
+	}
+
+	// 解析填充 SAN 字段
+	for i := range req.Hosts {
+		if ip := net.ParseIP(req.Hosts[i]); ip != nil {
+			tpl.IPAddresses = append(tpl.IPAddresses, ip)
+		} else if email, err := mail.ParseAddress(req.Hosts[i]); err == nil &#x26;&#x26; email != nil {
+			tpl.EmailAddresses = append(tpl.EmailAddresses, email.Address)
+		} else if uri, err := url.ParseRequestURI(req.Hosts[i]); err == nil &#x26;&#x26; uri != nil {
+			tpl.URIs = append(tpl.URIs, uri)
+		} else {
+			tpl.DNSNames = append(tpl.DNSNames, req.Hosts[i])
+		}
+	}
+
+	tpl.ExtraExtensions = []pkix.Extension{}
+
+    ...
+
+	// 调用 x509 包生成 csr
+	csr, err = x509.CreateCertificateRequest(rand.Reader, &#x26;tpl, priv)
+	if err != nil {
+		log.Errorf("failed to generate a CSR: %v", err)
+		err = cferr.Wrap(cferr.CSRError, cferr.BadRequest, err)
+		return
+	}
+	block := pem.Block{
+		Type:  "CERTIFICATE REQUEST",
+		Bytes: csr,
+	}
+
+	log.Info("encoded CSR")
+	// 生成 pem 格式 csr
+	csr = pem.EncodeToMemory(&#x26;block)
+	return
+}
+</code></pre>
+<p><code>csr.Generate()</code> 接收的 Request 参数实际上是作为 CSR 的模板。</p>
+<p>此处与 Istio PKI 中生成 CSR 的函数相似，感兴趣的也可以查看本人的《Istio 安全模块解析》文档。</p>
+<p>实际开发过程中发现此处有坑，<em>cfssl</em> 此处虽然支持了 SAN URI 的字段，但是在通过 cfssl CA Provider 发送 CSR　请求证书的时候，其服务端不支持 SAN URI 字段到证书的填充。针对这一点我已经提交了 Pull Requst。</p>
+<p>我们在实际开发中，使用创建 CSR 请求的包是来自 Istio PKI 的，其提供了更便捷的使用方式。</p>
+<h4>2.1.3. Signer</h4>
+<h5>2.1.3.1. 本地自签名</h5>
+<pre><code class="language-go">// initca/initca.go
+
+// 创建本地自签名 signer
+s, err := local.NewSigner(priv, nil, signer.DefaultSigAlgo(priv), policy)
+if err != nil {
+	log.Errorf("failed to create signer: %v", err)
+	return
+}
+
+signReq := signer.SignRequest{Hosts: req.Hosts, Request: string(csrPEM)}
+cert, err = s.Sign(signReq)
+</code></pre>
+<h5>2.1.3.2. Universal</h5>
+<p>设置 Remote CA，或通过 Server 启动时，会创建 Universal Signer。</p>
+<pre><code class="language-go">// SignerFromConfigAndDB takes the Config and creates the appropriate
+// signer.Signer object with a specified db
+func SignerFromConfigAndDB(c cli.Config, db *sqlx.DB) (signer.Signer, error) {
+   // If there is a config, use its signing policy. Otherwise create a default policy.
+   var policy *config.Signing
+   if c.CFG != nil {
+      policy = c.CFG.Signing
+   } else {
+      policy = &#x26;config.Signing{
+         Profiles: map[string]*config.SigningProfile{},
+         Default:  config.DefaultConfig(),
+      }
+   }
+
+   // Make sure the policy reflects the new remote
+   if c.Remote != "" {
+      err := policy.OverrideRemotes(c.Remote)
+      if err != nil {
+         log.Infof("Invalid remote %v, reverting to configuration default", c.Remote)
+         return nil, err
+      }
+   }
+
+   if c.MutualTLSCertFile != "" &#x26;&#x26; c.MutualTLSKeyFile != "" {
+      err := policy.SetClientCertKeyPairFromFile(c.MutualTLSCertFile, c.MutualTLSKeyFile)
+      if err != nil {
+         log.Infof("Invalid mutual-tls-cert: %s or mutual-tls-key: %s, defaulting to no client auth", c.MutualTLSCertFile, c.MutualTLSKeyFile)
+         return nil, err
+      }
+      log.Infof("Using client auth with mutual-tls-cert: %s and mutual-tls-key: %s", c.MutualTLSCertFile, c.MutualTLSKeyFile)
+   }
+
+   if c.TLSRemoteCAs != "" {
+      err := policy.SetRemoteCAsFromFile(c.TLSRemoteCAs)
+      if err != nil {
+         log.Infof("Invalid tls-remote-ca: %s, defaulting to system trust store", c.TLSRemoteCAs)
+         return nil, err
+      }
+      log.Infof("Using trusted CA from tls-remote-ca: %s", c.TLSRemoteCAs)
+   }
+
+   s, err := universal.NewSigner(cli.RootFromConfig(&#x26;c), policy)
+   if err != nil {
+      return nil, err
+   }
+
+   if db != nil {
+      dbAccessor := certsql.NewAccessor(db)
+      s.SetDBAccessor(dbAccessor)
+   }
+
+   return s, nil
+}
+</code></pre>
+<p>这里可以看到能够设置 TLS 客户端证书、信任的 CA 证书，以及 DB。</p>
+<p>这些配置项都是从文件读取的，后续开发过程中我考虑会改成配置项获取流程：</p>
+<ol>
+<li>从 ENV 获取配置项</li>
+<li>从数据库获取自身 CA 证书、没有则创建 CA 证书</li>
+<li>将证书写入临时文件，将临时文件地址传入 cfssl 配置项</li>
+</ol>
+<p>尽量减少修改源代码的工程量，保持最大的社区兼容性。</p>
+<h5>2.1.3.3. Remote</h5>
+<p><em>cfssl</em> 配置远程证书签发，</p>
+<pre><code class="language-go">// Helper function to perform a remote sign or info request.
+func (s *Signer) remoteOp(req interface{}, profile, target string) (resp interface{}, err error) {
+   jsonData, err := json.Marshal(req)
+   if err != nil {
+      return nil, cferr.Wrap(cferr.APIClientError, cferr.JSONError, err)
+   }
+
+   p, err := signer.Profile(s, profile)
+   if err != nil {
+      return
+   }
+
+   server := client.NewServerTLS(p.RemoteServer, helpers.CreateTLSConfig(p.RemoteCAs, p.ClientCert))
+   if server == nil {
+      return nil, cferr.Wrap(cferr.PolicyError, cferr.InvalidRequest,
+         errors.New("failed to connect to remote"))
+   }
+
+   server.SetReqModifier(s.reqModifier)
+
+   // There's no auth provider for the "info" method
+   if target == "info" {
+      resp, err = server.Info(jsonData)
+   } else if p.RemoteProvider != nil {
+      resp, err = server.AuthSign(jsonData, nil, p.RemoteProvider)
+   } else {
+      resp, err = server.Sign(jsonData)
+   }
+
+   if err != nil {
+      return nil, err
+   }
+
+   return
+}
+</code></pre>
+<p>涉及到使用 Remote CA 的操作会使用 <em>cfssl/api</em> 包，调用远程 CA 接口处理。</p>
+<h4>2.1.4. 证书处理</h4>
+<h5>2.1.4.1. Pre-Issuance Linting</h5>
+<pre><code class="language-go">// signer/local/local.go
+
+	var lintPriv crypto.Signer
+	// If there is at least one profile (including the default) that configures
+	// pre-issuance linting then generate the one-off lintPriv key.
+	for _, profile := range policy.Profiles {
+		if profile.LintErrLevel > 0 || policy.Default.LintErrLevel > 0 {
+			// In the future there may be demand for specifying the type of signer used
+			// for pre-issuance linting in configuration. For now we assume that signing
+			// with a randomly generated P-256 ECDSA private key is acceptable for all cases
+			// where linting is requested.
+			k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			if err != nil {
+				return nil, cferr.New(cferr.PrivateKeyError, cferr.GenerationFailed)
+			}
+			lintPriv = k
+			break
+		}
+	}
+</code></pre>
+<p>pre-issuance linting 即预签发校验，<a href="https://wiki.mozilla.org/CA/Required_or_Recommended_Practices#Pre-Issuance_Linting">Mozilla CA</a> 对此的解释是：</p>
+<blockquote>
+<p>Recently, several tools have been developed (<a href="https://github.com/awslabs/certlint">certlint/cablint</a>, <a href="https://github.com/kroeckx/x509lint">x509lint</a>, <a href="https://github.com/zmap/zlint">zlint</a>) which can check a tbsCertificate (To Be Signed Certificate - the  certificate complete except for the signature) for a large number of  standards violations (BRs, RFCs etc.). It is strongly recommended that  CAs integrate such tools into their issuance pipelines such that  issuance is, minimally, held up for manual review if an error or warning is found. Because BR or RFC violations are generally considered by  Mozilla to be misissuance, such integration will reduce the number of  misissuance events a CA experiences, if earlier parts of their pipeline  fail in their job of keeping certificates compliant.</p>
+</blockquote>
+<p><em>cfssl</em> 在 <a href="https://github.com/cloudflare/cfssl/issues/1008">Issue #1008</a> 中增加对证书 lint 的支持。</p>
+<pre><code class="language-go">// signer/local/local.go
+
+// lint performs pre-issuance linting of a given TBS certificate template when
+// the provided errLevel is > 0. Note that the template is provided by-value and
+// not by-reference. This is important as the lint function needs to mutate the
+// template's signature algorithm to match the lintPriv.
+func (s *Signer) lint(template x509.Certificate, errLevel lint.LintStatus, lintRegistry lint.Registry) error {
+	// Always return nil when linting is disabled (lint.Reserved == 0).
+	if errLevel == lint.Reserved {
+		return nil
+	}
+	// without a lintPriv key to use to sign the tbsCertificate we can't lint it.
+	if s.lintPriv == nil {
+		return cferr.New(cferr.PrivateKeyError, cferr.Unavailable)
+	}
+
+	// The template's SignatureAlgorithm must be mutated to match the lintPriv or
+	// x509.CreateCertificate will error because of the mismatch. At the time of
+	// writing s.lintPriv is always an ECDSA private key. This switch will need to
+	// be expanded if the lint key type is made configurable.
+	switch s.lintPriv.(type) {
+	case *ecdsa.PrivateKey:
+		template.SignatureAlgorithm = x509.ECDSAWithSHA256
+	default:
+		return cferr.New(cferr.PrivateKeyError, cferr.KeyMismatch)
+	}
+
+	prelintBytes, err := x509.CreateCertificate(rand.Reader, &#x26;template, s.ca, template.PublicKey, s.lintPriv)
+	if err != nil {
+		return cferr.Wrap(cferr.CertificateError, cferr.Unknown, err)
+	}
+	prelintCert, err := zx509.ParseCertificate(prelintBytes)
+	if err != nil {
+		return cferr.Wrap(cferr.CertificateError, cferr.ParseFailed, err)
+	}
+	errorResults := map[string]lint.LintResult{}
+	results := zlint.LintCertificateEx(prelintCert, lintRegistry)
+	for name, res := range results.Results {
+		if res.Status > errLevel {
+			errorResults[name] = *res
+		}
+	}
+	if len(errorResults) > 0 {
+		return &#x26;LintError{
+			ErrorResults: errorResults,
+		}
+	}
+	return nil
+}
+</code></pre>
+<p>自签名时调用 zlint 进行证书合法性校验。</p>
+<h5>2.1.4.2. 证书模板</h5>
+<p>CSR 模板处理：</p>
+<pre><code class="language-go">// signer/local/local.go
+
+	// 解析 CSR 模板
+	csrTemplate, err := signer.ParseCertificateRequest(s, profile, block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Copy out only the fields from the CSR authorized by policy.
+	safeTemplate := x509.Certificate{}
+	// If the profile contains no explicit whitelist, assume that all fields
+	// should be copied from the CSR.
+	if profile.CSRWhitelist == nil {
+		safeTemplate = *csrTemplate
+	} else {
+		// 如果设置了 CSR 模板白名单，则只放行白名单里的字段
+		if profile.CSRWhitelist.Subject {
+			safeTemplate.Subject = csrTemplate.Subject
+		}
+		if profile.CSRWhitelist.PublicKeyAlgorithm {
+			safeTemplate.PublicKeyAlgorithm = csrTemplate.PublicKeyAlgorithm
+		}
+		if profile.CSRWhitelist.PublicKey {
+			safeTemplate.PublicKey = csrTemplate.PublicKey
+		}
+		if profile.CSRWhitelist.SignatureAlgorithm {
+			safeTemplate.SignatureAlgorithm = csrTemplate.SignatureAlgorithm
+		}
+		if profile.CSRWhitelist.DNSNames {
+			safeTemplate.DNSNames = csrTemplate.DNSNames
+		}
+		if profile.CSRWhitelist.IPAddresses {
+			safeTemplate.IPAddresses = csrTemplate.IPAddresses
+		}
+		if profile.CSRWhitelist.EmailAddresses {
+			safeTemplate.EmailAddresses = csrTemplate.EmailAddresses
+		}
+		if profile.CSRWhitelist.URIs {
+			safeTemplate.URIs = csrTemplate.URIs
+		}
+	}
+
+	...
+
+	// 用 hosts 字段覆盖 SAN
+	OverrideHosts(&#x26;safeTemplate, req.Hosts)
+</code></pre>
+<p>生成证书序列号：</p>
+<pre><code class="language-go">		// RFC 5280 4.1.2.2:
+		// Certificate users MUST be able to handle serialNumber
+		// values up to 20 octets.  Conforming CAs MUST NOT use
+		// serialNumber values longer than 20 octets.
+		//
+		// If CFSSL is providing the serial numbers, it makes
+		// sense to use the max supported size.
+		serialNumber := make([]byte, 20)
+		_, err = io.ReadFull(rand.Reader, serialNumber)
+		if err != nil {
+			return nil, cferr.Wrap(cferr.CertificateError, cferr.Unknown, err)
+		}
+
+		// SetBytes interprets buf as the bytes of a big-endian
+		// unsigned integer. The leading byte should be masked
+		// off to ensure it isn't negative.
+		serialNumber[0] &#x26;= 0x7F
+
+		safeTemplate.SerialNumber = new(big.Int).SetBytes(serialNumber)
+</code></pre>
+<p>填充证书特殊字段：</p>
+<pre><code class="language-go">// signer/signer.go
+
+	// 证书 OCSP 字段来自配置的 Profile OCSP URL
+	if ocspURL = profile.OCSP; ocspURL == "" {
+		ocspURL = defaultProfile.OCSP
+	}
+
+	if template.IsCA {
+		template.MaxPathLen = profile.CAConstraint.MaxPathLen
+		if template.MaxPathLen == 0 {
+			template.MaxPathLenZero = profile.CAConstraint.MaxPathLenZero
+		}
+		// 如果是 CA 证书，则没有 SAN 字段
+		template.DNSNames = nil
+		template.EmailAddresses = nil
+		template.URIs = nil
+	}
+
+	// 若设置 OCSP No Check
+	if profile.OCSPNoCheck {
+		ocspNoCheckExtension := pkix.Extension{
+			Id:       asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 48, 1, 5},
+			Critical: false,
+			Value:    []byte{0x05, 0x00},
+		}
+		template.ExtraExtensions = append(template.ExtraExtensions, ocspNoCheckExtension)
+	}
+</code></pre>
+<h5>2.1.4.3. 签名证书</h5>
+<pre><code class="language-go">// signer/local/local.go
+func (s *Signer) sign(template *x509.Certificate, lintErrLevel lint.LintStatus, lintRegistry lint.Registry) (cert []byte, err error) {
+   var initRoot bool
+   // 没有指定 cert
+   if s.ca == nil {
+      // 不是 ca 证书则报错
+      if !template.IsCA {
+         err = cferr.New(cferr.PolicyError, cferr.InvalidRequest)
+         return
+      }
+      // ca 证书没有 SAN 字段
+      template.DNSNames = nil
+      template.EmailAddresses = nil
+      template.URIs = nil
+      s.ca = template
+      initRoot = true
+   }
+
+   if err := s.lint(*template, lintErrLevel, lintRegistry); err != nil {
+      return nil, err
+   }
+
+   // 签名证书
+   derBytes, err := x509.CreateCertificate(rand.Reader, template, s.ca, template.PublicKey, s.priv)
+   if err != nil {
+      return nil, cferr.Wrap(cferr.CertificateError, cferr.Unknown, err)
+   }
+   if initRoot {
+      s.ca, err = x509.ParseCertificate(derBytes)
+      if err != nil {
+         return nil, cferr.Wrap(cferr.CertificateError, cferr.ParseFailed, err)
+      }
+   }
+
+   cert = pem.EncodeToMemory(&#x26;pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+   log.Infof("signed certificate with serial number %d", template.SerialNumber)
+   return
+}
+</code></pre>
+<h5>2.1.4.4. 数据库储存</h5>
+<pre><code class="language-go">// 如果设置了 DB 储存
+if s.dbAccessor != nil {
+   now := time.Now()
+   var certRecord = certdb.CertificateRecord{
+      Serial: certTBS.SerialNumber.String(),
+      // this relies on the specific behavior of x509.CreateCertificate
+      // which sets the AuthorityKeyId from the signer's SubjectKeyId
+      AKI:        hex.EncodeToString(parsedCert.AuthorityKeyId),
+      CALabel:    req.Label,
+      Status:     "good",
+      Expiry:     certTBS.NotAfter,
+      PEM:        string(signedCert),
+      IssuedAt:   &#x26;now,
+      NotBefore:  &#x26;certTBS.NotBefore,
+      CommonName: sql.NullString{String: certTBS.Subject.CommonName, Valid: true},
+   }
+
+   if err := certRecord.SetMetadata(req.Metadata); err != nil {
+      return nil, err
+   }
+   if err := certRecord.SetSANs(certTBS.DNSNames); err != nil {
+      return nil, err
+   }
+
+   // 在数据库创建一条 row
+   if err := s.dbAccessor.InsertCertificate(certRecord); err != nil {
+      return nil, err
+   }
+   log.Debug("saved certificate with serial number ", certTBS.SerialNumber)
+}
+</code></pre>
+<h4>2.1.4. 导出文件</h4>
+<p><em>cfssljson</em> Cmd 工作为接收请求返回，并将其通过 Pipeline 解析，输出到文件。</p>
+<pre><code class="language-go">// cmd/cfssljson/cfssljson.go
+func readFile(filespec string) ([]byte, error) {
+	if filespec == "-" {
+		// 若参数为 "-"，则从 stdin 获取
+		return ioutil.ReadAll(os.Stdin)
+	}
+	return ioutil.ReadFile(filespec)
+}
+</code></pre>
+<p>解析成对应格式的文件并输出。</p>
+<pre><code class="language-go">	if contents, ok := input["cert"]; ok {
+		cert = contents.(string)
+	} else if contents, ok = input["certificate"]; ok {
+		cert = contents.(string)
+	}
+	if cert != "" {
+		outs = append(outs, outputFile{
+			Filename: baseName + ".pem",
+			Contents: cert,
+			Perms:    0664,
+		})
+	}
+
+	if contents, ok := input["key"]; ok {
+		key = contents.(string)
+	} else if contents, ok = input["private_key"]; ok {
+		key = contents.(string)
+	}
+	if key != "" {
+		outs = append(outs, outputFile{
+			Filename: baseName + "-key.pem",
+			Contents: key,
+			Perms:    0600,
+		})
+	}
+
+	for _, e := range outs {
+		if *output {
+			if e.IsBinary {
+				e.Contents = base64.StdEncoding.EncodeToString([]byte(e.Contents))
+			}
+			fmt.Fprintf(os.Stdout, "%s\n", e.Contents)
+		} else {
+			writeFile(e.Filename, e.Contents, e.Perms)
+		}
+	}
+</code></pre>
+<h4>2.1.5. 证书 Bundle</h4>
+<blockquote>
+<p><strong>CA bundle</strong> is a file that contains root and  intermediate certificates. The end-entity certificate along with a CA  bundle constitutes the certificate chain.</p>
+</blockquote>
+<p>How do I make CA-bundle file from CRT files?</p>
+<p>There are a few *.crt files in your package:</p>
+<ul>
+<li><strong>AddTrustExternalCARoot.crt</strong> - Root CA Certificate</li>
+<li><strong>COMODORSAAddTrustCA.crt</strong> - Intermediate CA Certificate 1</li>
+<li><strong>COMODORSADomainValidationSecureServerCA.crt</strong> - Intermediate CA Certificate 2</li>
+<li><strong>yourDomain.crt</strong> - Your SSL Certificate</li>
+</ul>
+<p>CA-bundle is a file that contains root and intermediate certificates in the right order. The order must be:</p>
+<p>- Intermediate CA Certificate 2</p>
+<p>- Intermediate CA Certificate 1</p>
+<p>- Root CA Certificate</p>
+<pre><code class="language-bash">$ cat ComodoRSADomainValidationSecureServerCA.crt ComodoRSAAddTrustCA.crt AddTrustExternalCARoot.crt > yourDomain.ca-bundle
+</code></pre>
+<p><em>cfssl bundle</em> 命令只用于生成包含 end-entry 证书的证书链，但在我们实际使用中，在 Workload 间传输的只是 Workload 证书，不会传输 CA 证书。</p>
+<h3>2.2. CA Server</h3>
+<h4>2.2.1. 启动</h4>
+<pre><code class="language-go">// serverMain is the command line entry point to the API server. It sets up a
+// new HTTP server to handle sign, bundle, and validate requests.
+func serverMain(args []string, c cli.Config) error {
+	
+    ...
+
+    // 初始化 signer
+	if s, err = sign.SignerFromConfigAndDB(c, db); err != nil {
+		log.Warningf("couldn't initialize signer: %v", err)
+	}
+
+    // 初始化 ocsp signer
+	if ocspSigner, err = ocspsign.SignerFromConfig(c); err != nil {
+		log.Warningf("couldn't initialize ocsp signer: %v", err)
+	}
+
+    // 注册 api handler
+	registerHandlers()
+
+	addr := net.JoinHostPort(conf.Address, strconv.Itoa(conf.Port))
+
+	tlscfg := tls.Config{}
+	if conf.MinTLSVersion != "" {
+		tlscfg.MinVersion = helpers.StringTLSVersion(conf.MinTLSVersion)
+	}
+
+	if conf.TLSCertFile == "" || conf.TLSKeyFile == "" {
+		log.Info("Now listening on ", addr)
+		return http.ListenAndServe(addr, nil)
+	}
+
+    ...
+	return server.ListenAndServeTLS(conf.TLSCertFile, conf.TLSKeyFile)
+
+}
+</code></pre>
+<p>启动时流程：</p>
+<ol>
+<li>创建 Signer，参考 2.1.3 节</li>
+<li>注册 API Handler，处理 HTTP 请求</li>
+<li>启动 HTTP / TLS 服务器（支持 mTLS）</li>
+</ol>
+<h4>2.2.2. 注册 API Handler</h4>
+<pre><code class="language-go">// cli/serve/serve.go
+
+var endpoints = map[string]func() (http.Handler, error){
+	"sign": func() (http.Handler, error) {
+		if s == nil {
+			return nil, errBadSigner
+		}
+
+		h, err := signhandler.NewHandlerFromSigner(s)
+		if err != nil {
+			return nil, err
+		}
+
+		if conf.CABundleFile != "" &#x26;&#x26; conf.IntBundleFile != "" {
+			sh := h.Handler.(*signhandler.Handler)
+			if err := sh.SetBundler(conf.CABundleFile, conf.IntBundleFile); err != nil {
+				return nil, err
+			}
+		}
+
+		return h, nil
+	},
+
+	"authsign": func() (http.Handler, error) {
+		if s == nil {
+			return nil, errBadSigner
+		}
+
+		h, err := signhandler.NewAuthHandlerFromSigner(s)
+		if err != nil {
+			return nil, err
+		}
+
+		if conf.CABundleFile != "" &#x26;&#x26; conf.IntBundleFile != "" {
+			sh := h.(*api.HTTPHandler).Handler.(*signhandler.AuthHandler)
+			if err := sh.SetBundler(conf.CABundleFile, conf.IntBundleFile); err != nil {
+				return nil, err
+			}
+		}
+
+		return h, nil
+	},
+
+	"info": func() (http.Handler, error) {
+		if s == nil {
+			return nil, errBadSigner
+		}
+		return info.NewHandler(s)
+	},
+
+	"crl": func() (http.Handler, error) {
+		if s == nil {
+			return nil, errBadSigner
+		}
+
+		if db == nil {
+			return nil, errNoCertDBConfigured
+		}
+
+		return crl.NewHandler(certsql.NewAccessor(db), conf.CAFile, conf.CAKeyFile)
+	},
+
+	"gencrl": func() (http.Handler, error) {
+		if s == nil {
+			return nil, errBadSigner
+		}
+		return gencrl.NewHandler(), nil
+	},
+
+	"newcert": func() (http.Handler, error) {
+		if s == nil {
+			return nil, errBadSigner
+		}
+		h := generator.NewCertGeneratorHandlerFromSigner(generator.CSRValidate, s)
+		if conf.CABundleFile != "" &#x26;&#x26; conf.IntBundleFile != "" {
+			cg := h.(api.HTTPHandler).Handler.(*generator.CertGeneratorHandler)
+			if err := cg.SetBundler(conf.CABundleFile, conf.IntBundleFile); err != nil {
+				return nil, err
+			}
+		}
+		return h, nil
+	},
+
+	"bundle": func() (http.Handler, error) {
+		return bundle.NewHandler(conf.CABundleFile, conf.IntBundleFile)
+	},
+
+	"newkey": func() (http.Handler, error) {
+		return generator.NewHandler(generator.CSRValidate)
+	},
+
+	"init_ca": func() (http.Handler, error) {
+		return initca.NewHandler(), nil
+	},
+
+	"scan": func() (http.Handler, error) {
+		return scan.NewHandler(conf.CABundleFile)
+	},
+
+	"scaninfo": func() (http.Handler, error) {
+		return scan.NewInfoHandler(), nil
+	},
+
+	"certinfo": func() (http.Handler, error) {
+		if db != nil {
+			return certinfo.NewAccessorHandler(certsql.NewAccessor(db)), nil
+		}
+
+		return certinfo.NewHandler(), nil
+	},
+
+	"ocspsign": func() (http.Handler, error) {
+		if ocspSigner == nil {
+			return nil, errBadSigner
+		}
+		return apiocsp.NewHandler(ocspSigner), nil
+	},
+
+	"revoke": func() (http.Handler, error) {
+		if db == nil {
+			return nil, errNoCertDBConfigured
+		}
+		return revoke.NewHandler(certsql.NewAccessor(db)), nil
+	},
+
+	"/": func() (http.Handler, error) {
+		if err := staticBox.findStaticBox(); err != nil {
+			return nil, err
+		}
+
+		return http.FileServer(staticBox), nil
+	},
+
+	"health": func() (http.Handler, error) {
+		return health.NewHealthCheck(), nil
+	},
+}
+</code></pre>
+<h4>2.2.3. OCSP</h4>
+<blockquote>
+<p>Partly to combat these scalability issues, OCSP was introduced. OCSP  provides on-demand answers about the revocation status of a given  certificate. An OCSP responder is a service that returns signed answers  to the question "is this certificate revoked?". The response is either  "Yes" or "No". Each response is signed by the CA and has a validity  period so the client knows how long to cache the response.</p>
+<p>CFSSL now has an OCSP responder service that can be configured to run in a distributed way, without access to the CA. There are also OCSP  management tools in CFSSL to automatically populate the data for the  OCSP responder and keep it fresh using the certificate database.</p>
+</blockquote>
+<p><img src="https://blog.cloudflare.com/content/images/2016/03/image_8.png" alt="refreshing the OCSP responder"></p>
+<p>OCSP 签名，和 OCSP 返回是独立的程序，利于分布式部署。</p>
+<h5>2.2.3.1. OCSP Responder</h5>
+<p>介绍：</p>
+<pre><code class="language-go">// Usage text of 'cfssl serve'
+var ocspServerUsageText = `cfssl ocspserve -- set up an HTTP server that handles OCSP requests from either a file or directly from a database (see RFC 5019)
+
+  Usage of ocspserve:
+          cfssl ocspserve [-address address] [-port port] [-responses file] [-db-config db-config]
+
+  Flags:
+  `
+</code></pre>
+<p>OCSP Server 能够在自定义的 Path 上启动：</p>
+<pre><code class="language-go">	log.Info("Registering OCSP responder handler")
+	http.Handle(c.Path, ocsp.NewResponder(src, nil))
+</code></pre>
+<p><em>cfssl</em> OCSP 处理请求接口：</p>
+<pre><code class="language-go">// ocsp/responder.go
+
+// A Responder can process both GET and POST requests.  The mapping
+// from an OCSP request to an OCSP response is done by the Source;
+// the Responder simply decodes the request, and passes back whatever
+// response is provided by the source.
+// Note: The caller must use http.StripPrefix to strip any path components
+// (including '/') on GET requests.
+// Do not use this responder in conjunction with http.NewServeMux, because the
+// default handler will try to canonicalize path components by changing any
+// strings of repeated '/' into a single '/', which will break the base64
+// encoding.
+func (rs Responder) ServeHTTP(response http.ResponseWriter, request *http.Request) {
+
+	...
+    
+	// Parse response as an OCSP request
+	// XXX: This fails if the request contains the nonce extension.
+	//      We don't intend to support nonces anyway, but maybe we
+	//      should return unauthorizedRequest instead of malformed.
+	ocspRequest, err := ocsp.ParseRequest(requestBody)
+
+    ...
+    
+	// Look up OCSP response from source
+	ocspResponse, headers, err := rs.Source.Response(ocspRequest)
+
+    ...
+    
+	parsedResponse, err := ocsp.ParseResponse(ocspResponse, nil)
+
+    ...
+
+	response.WriteHeader(http.StatusOK)
+	response.Write(ocspResponse)
+}
+
+</code></pre>
+<p>OCSP 返回的内容实际上直接从数据库读取后返回：</p>
+<pre><code class="language-go">// ocsp/responder.go
+
+// Response implements cfssl.ocsp.responder.Source, which returns the
+// OCSP response in the Database for the given request with the expiration
+// date furthest in the future.
+func (src DBSource) Response(req *ocsp.Request) ([]byte, http.Header, error) {
+	...
+	records, err := src.Accessor.GetOCSP(strSN, aki)
+	...
+	return []byte(cur.Body), nil, nil
+}
+</code></pre>
+<pre><code class="language-go">// GetOCSP retrieves a certdb.OCSPRecord from db by serial.
+func (d *Accessor) GetOCSP(serial, aki string) (ors []certdb.OCSPRecord, err error) {
+	err = d.checkDB()
+	if err != nil {
+		return nil, err
+	}
+
+	err = d.db.Select(&#x26;ors, fmt.Sprintf(d.db.Rebind(selectOCSPSQL), sqlstruct.Columns(certdb.OCSPRecord{})), serial, aki)
+	if err != nil {
+		return nil, wrapSQLError(err)
+	}
+
+	return ors, nil
+}
+</code></pre>
+<h5>2.2.3.2. OCSP Sign</h5>
+<p>OCSP 签名和返回是分开的，并且不会在创建证书一并创建。</p>
+<p><img src="/images/2021-11-01-07.png" alt="">场景1：OCSP 签名会在证书被吊销时创建。</p>
+<pre><code class="language-go">// cli/ocsprefresh/ocsprefresh.go
+
+// ocsprefreshMain is the main CLI of OCSP refresh functionality.
+func ocsprefreshMain(args []string, c cli.Config) error {
+   ...
+
+	s, err := SignerFromConfig(c)
+	if err != nil {
+		log.Critical("Unable to create OCSP signer: ", err)
+		return err
+	}
+
+	db, err := dbconf.DBFromConfig(c.DBConfigFile)
+	if err != nil {
+		return err
+	}
+
+	dbAccessor := sql.NewAccessor(db)
+	certs, err := dbAccessor.GetUnexpiredCertificates()
+	if err != nil {
+		return err
+	}
+
+	// Set an expiry timestamp for all certificates refreshed in this batch
+	ocspExpiry := time.Now().Add(c.Interval)
+	for _, certRecord := range certs {
+		cert, err := helpers.ParseCertificatePEM([]byte(certRecord.PEM))
+		if err != nil {
+			log.Critical("Unable to parse certificate: ", err)
+			return err
+		}
+
+		req := ocsp.SignRequest{
+			Certificate: cert,
+			Status:      certRecord.Status,
+		}
+
+		if certRecord.Status == "revoked" {
+			req.Reason = int(certRecord.Reason)
+			req.RevokedAt = certRecord.RevokedAt
+		}
+
+		resp, err := s.Sign(req)
+		if err != nil {
+			log.Critical("Unable to sign OCSP response: ", err)
+			return err
+		}
+
+		err = dbAccessor.UpsertOCSP(cert.SerialNumber.String(), hex.EncodeToString(cert.AuthorityKeyId), string(resp), ocspExpiry)
+		if err != nil {
+			log.Critical("Unable to save OCSP response: ", err)
+			return err
+		}
+	}
+
+	return nil
+}
+</code></pre>
+<p>场景2：通过 <code>cfssl ocsprefresh</code> 命令执行。</p>
+<p>二次开发时可以考虑将 OCSP 记录在签发证书时进行创建。</p>
+<h4>2.2.4. API Client</h4>
+<p><code>api/client</code> 包实现了 cfssl 的 API 客户端。</p>
+<pre><code class="language-go">// A Remote points to at least one (but possibly multiple) remote
+// CFSSL instances. It must be able to perform a authenticated and
+// unauthenticated certificate signing requests, return information
+// about the CA on the other end, and return a list of the hosts that
+// are used by the remote.
+type Remote interface {
+   AuthSign(req, id []byte, provider auth.Provider) ([]byte, error)
+   Sign(jsonData []byte) ([]byte, error)
+   Info(jsonData []byte) (*info.Resp, error)
+   Hosts() []string
+   SetReqModifier(func(*http.Request, []byte))
+   SetRequestTimeout(d time.Duration)
+   SetProxy(func(*http.Request) (*url.URL, error))
+}
+</code></pre>
+<p>主要功能为 API 接口和参数的封装。会在下一节中被用到。</p>
+<h5>2.2.4.1. 获取 CA 证书</h5>
+<pre><code class="language-go">// signer/local/local.go
+
+// 获取 CA Info
+// Info return a populated info.Resp struct or an error.
+func (s *Signer) Info(req info.Req) (resp *info.Resp, err error) {
+	cert, err := s.Certificate(req.Label, req.Profile)
+	if err != nil {
+		return
+	}
+
+	profile, err := signer.Profile(s, req.Profile)
+	if err != nil {
+		return
+	}
+
+	resp = new(info.Resp)
+	if cert.Raw != nil {
+		resp.Certificate = string(bytes.TrimSpace(pem.EncodeToMemory(&#x26;pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})))
+	}
+	resp.Usage = profile.Usage
+	resp.ExpiryString = profile.ExpiryString
+
+	return
+}
+</code></pre>
+<p>返回服务端的 CA 证书，该证书会用在 Client 的 TrustRoot 中。</p>
+<p>问题点：Root CA 证书没有被加载到程序中，需要在服务端增加 Root 证书的返回值。</p>
+<h4>2.2.5. 证书吊销</h4>
+<h5>2.2.5.1. 吊销接口</h5>
+<p>证书吊销接口支持三个参数：</p>
+<pre><code class="language-sql">UPDATE certificates
+	SET status='revoked', revoked_at=CURRENT_TIMESTAMP, reason=:reason
+	WHERE (serial_number = :serial_number AND authority_key_identifier = :authority_key_identifier);
+</code></pre>
+<p>证书序列号和 AKI 定位一个证书。</p>
+<pre><code class="language-go">// api/revoke/revoke.go
+
+	// If we were given a signer, try and generate an OCSP
+	// response indicating revocation
+	if h.Signer != nil {
+		// TODO: should these errors be errors?
+		// Grab the certificate from the database
+		cr, err := h.dbAccessor.GetCertificate(req.Serial, req.AKI)
+		if err != nil {
+			return err
+		}
+		if len(cr) != 1 {
+			return errors.NewBadRequestString("No unique certificate found")
+		}
+
+		cert, err := helpers.ParseCertificatePEM([]byte(cr[0].PEM))
+		if err != nil {
+			return errors.NewBadRequestString("Unable to parse certificates from PEM data")
+		}
+
+		sr := ocsp.SignRequest{
+			Certificate: cert,
+			Status:      "revoked",
+			Reason:      reasonCode,
+			RevokedAt:   time.Now().UTC(),
+		}
+
+		ocspResponse, err := h.Signer.Sign(sr)
+		if err != nil {
+			return err
+		}
+
+		// We parse the OCSP response in order to get the next
+		// update time/expiry time
+		ocspParsed, err := stdocsp.ParseResponse(ocspResponse, nil)
+		if err != nil {
+			return err
+		}
+
+		ocspRecord := certdb.OCSPRecord{
+			Serial: req.Serial,
+			AKI:    req.AKI,
+			Body:   string(ocspResponse),
+			Expiry: ocspParsed.NextUpdate,
+		}
+
+		if err = h.dbAccessor.InsertOCSP(ocspRecord); err != nil {
+			return err
+		}
+	}
+</code></pre>
+<p>证书吊销时会进行 OCSP 签名，创建一个吊销状态的 OCSP Response。</p>
+<h5>2.2.5.2. 查询证书吊销</h5>
+<p>证书吊销没有主动通知机制，如何感应到证书已经被吊销？</p>
+<p><a href="https://github.com/snowflakedb/gosnowflake/issues/5">https://github.com/snowflakedb/gosnowflake/issues/5</a></p>
+<blockquote>
+<p>Here are the steps to implement the revocation checks with OCSP:</p>
+<ul>
+<li>Check if certificate validation can be intercepted to add revocation checks (Yes. TLSClientConfig including verifyPeerCertificate can be  injected in Client)</li>
+<li>Extract OCSP URL from the certificate</li>
+<li>Make sure OCSP Request can be composed.</li>
+<li>Make sure a simple roundtrip with OCSP server returns OCSP Response and can be decoded.</li>
+<li>Make sure OCSP Response can include enough information to validate the revocation status.</li>
+<li>Implement concurrent OCSP round trips for chained certificates.</li>
+<li>Implement caching the results in a cache directory</li>
+</ul>
+</blockquote>
+<p>通过实现 <code>tls.Config.VerifyPeerCertificate</code> 方法，我们可以自定义实现 OCSP 查询：</p>
+<pre><code class="language-go">    // VerifyPeerCertificate, if not nil, is called after normal
+    // certificate verification by either a TLS client or server. It
+    // receives the raw ASN.1 certificates provided by the peer and also
+    // any verified chains that normal processing found. If it returns a
+    // non-nil error, the handshake is aborted and that error results.
+    //
+    // If normal verification fails then the handshake will abort before
+    // considering this callback. If normal verification is disabled by
+    // setting InsecureSkipVerify, or (for a server) when ClientAuth is
+    // RequestClientCert or RequireAnyClientCert, then this callback will
+    // be considered but the verifiedChains argument will always be nil.
+    VerifyPeerCertificate func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error // Go 1.8
+</code></pre>
+<p>认证 OCSP 的示例代码 <a href="https://github.com/snowflakedb/gosnowflake/blob/master/ocsp.go%EF%BC%9A">https://github.com/snowflakedb/gosnowflake/blob/master/ocsp.go：</a></p>
+<pre><code class="language-go">// verifyPeerCertificate verifies all of certificate revocation status
+func verifyPeerCertificate(ctx context.Context, verifiedChains [][]*x509.Certificate) (err error) {
+	for i := 0; i &#x3C; len(verifiedChains); i++ {
+		// Certificate signed by Root CA. This should be one before the last in the Certificate Chain
+		numberOfNoneRootCerts := len(verifiedChains[i]) - 1
+		if !verifiedChains[i][numberOfNoneRootCerts].IsCA || string(verifiedChains[i][numberOfNoneRootCerts].RawIssuer) != string(verifiedChains[i][numberOfNoneRootCerts].RawSubject) {
+			// Check if the last Non Root Cert is also a CA or is self signed.
+			// if the last certificate is not, add it to the list
+			rca := caRoot[string(verifiedChains[i][numberOfNoneRootCerts].RawIssuer)]
+			if rca == nil {
+				return fmt.Errorf("failed to find root CA. pkix.name: %v", verifiedChains[i][numberOfNoneRootCerts].Issuer)
+			}
+			verifiedChains[i] = append(verifiedChains[i], rca)
+			numberOfNoneRootCerts++
+		}
+		results := getAllRevocationStatus(ctx, verifiedChains[i])
+		if r := canEarlyExitForOCSP(results, numberOfNoneRootCerts); r != nil {
+			return r.err
+		}
+	}
+
+	ocspResponseCacheLock.Lock()
+	if cacheUpdated {
+		writeOCSPCacheFile()
+	}
+	cacheUpdated = false
+	ocspResponseCacheLock.Unlock()
+	return nil
+}
+</code></pre>
+<h3>2.3. Transport</h3>
+<p>我称呼它为 Workload SDK。</p>
+<p>我们后续的 Workload SDK 是基于此包修改而来。本质上与 Istio Pilot Agent 的 CA Client 类似。</p>
+<p><img src="https://blog.cloudflare.com/content/images/2016/03/image_3.png" alt="Certificate Issuance"></p>
+<p>我发现上图中 cfssl 把 "OCSP" 写成了 "OSCP"，🤣。</p>
+<h4>2.3.1. 配置项</h4>
+<p>配置项作为一个特性，在 CFSSL 的官方文档中被提到。</p>
+<pre><code class="language-go">{
+  "request": {
+    "CN": "test server",
+    "hosts": ["127.0.0.1"]
+  },
+  "profiles": {
+    "paths": {
+      "private_key": "server.key",
+      "certificate": "server.pem"
+    },
+    "cfssl": {
+      "profile": "server",
+      "remote": "127.0.0.1:8888",
+      "auth-type": "standard",
+      "auth-key": "4f4f26686209f672e0ec7b19cbbc8b6d94fdd12cc0b20326f9005d5f234e6e3e"
+    }
+  },
+  "roots": [{
+    "type": "system"
+  }],
+  "client_roots": [{
+    "type": "cfssl",
+    "metadata": {
+      "host": "127.0.0.1:8888",
+      "profile": "client"
+    }
+  }]
+}
+</code></pre>
+<p><code>roots</code> 以及 <code>client_roots</code> 是用来配置 System Trust Store 和 Client Trust Store 的。</p>
+<pre><code class="language-go">	// TrustStore contains the certificates trusted by this
+	// transport.
+	TrustStore *roots.TrustStore
+
+	// ClientTrustStore contains the certificate authorities to
+	// use in verifying client authentication certificates.
+	ClientTrustStore *roots.TrustStore
+</code></pre>
+<h4>2.3.2. TrustStore</h4>
+<blockquote>
+<p>A <strong>TrustStore</strong> holds the certificates of external systems that you trust. So a <strong>TrustStore</strong> is a KeyStore file, that contains the public keys/certificate of external hosts that you trust.</p>
+</blockquote>
+<h5>2.3.2.1. System Cert Pool</h5>
+<p><em>cfssl</em> 源码中将 Golang 官方 x509 包中 system 部分 copy 到了 <code>transport/roots/system</code> 目录下，用于创建系统信任的 CA 证书池，但没有对 Windows 进行处理，导致在 Windows 上出现报错。</p>
+<p>我对其进行了更改，其功能没有发生变化，但不会出现编译报错：</p>
+<pre><code class="language-go">// transport/roots/system.go
+
+func NewSystem(_ map[string]string) ([]*x509.Certificate, error) {
+	var certs []*x509.Certificate
+	certpool, err := x509.SystemCertPool()
+	if err != nil {
+		// 返回 nil，否则 panic
+		return nil, nil
+	}
+	for _, pem := range certpool.Subjects() {
+		cert, err := helpers.ParseCertificatesPEM(pem)
+		if err != nil {
+			return nil, err
+		}
+		certs = append(certs, cert...)
+	}
+	return certs, nil
+}
+</code></pre>
+<p>查看 Golang 官方 x509 包中：</p>
+<pre><code class="language-go">func SystemCertPool() (*CertPool, error) {
+	if runtime.GOOS == "windows" {
+		// Issue 16736, 18609:
+		return nil, errors.New("crypto/x509: system root pool is not available on Windows")
+	}
+	...
+	return loadSystemRoots()
+}
+</code></pre>
+<p>Windows 获取不到 system root pool。</p>
+<p>Linux 中的系统内置 CA 证书在：</p>
+<pre><code class="language-go">// Copyright 2015 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package x509
+
+// Possible certificate files; stop after finding one.
+var certFiles = []string{
+    "/etc/ssl/certs/ca-certificates.crt",                // Debian/Ubuntu/Gentoo etc.
+    "/etc/pki/tls/certs/ca-bundle.crt",                  // Fedora/RHEL 6
+    "/etc/ssl/ca-bundle.pem",                            // OpenSUSE
+    "/etc/pki/tls/cacert.pem",                           // OpenELEC
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // CentOS/RHEL 7
+    "/etc/ssl/cert.pem",                                 // Alpine Linux
+}
+</code></pre>
+<h5>2.3.2.2. 获取 CA 证书</h5>
+<pre><code class="language-go">// transport/roots/provider.go
+
+// A TrustStore contains a pool of certificate that are trusted for a
+// given TLS configuration.
+type TrustStore struct {
+   roots map[string]*x509.Certificate
+}
+
+// New produces a new trusted root provider from a collection of
+// roots. If there are no roots, the system roots will be used.
+func New(rootDefs []*core.Root) (*TrustStore, error) {
+	var err error
+
+	var store = &#x26;TrustStore{}
+	var roots []*x509.Certificate
+
+    ...
+    
+	err = errors.New("transport: no supported root providers found")
+	for _, root := range rootDefs {
+		pfn, ok := Providers[root.Type]
+		if ok {
+			roots, err = pfn(root.Metadata)
+			if err != nil {
+				break
+			}
+
+			store.addCerts(roots)
+		}
+	}
+	...
+	return store, err
+}
+</code></pre>
+<p>当我们添加一个 CA 证书来源时，程序会调用 <code>Providers[root.Type]()</code> 获取 CA 证书。</p>
+<p>支持的 CA 证书来源有：</p>
+<pre><code class="language-go">// Providers is a mapping of supported providers and the functions
+// that can build them.
+var Providers = map[string]func(map[string]string) ([]*x509.Certificate, error){
+	"system": NewSystem,
+	"cfssl":  NewCFSSL,
+	"file":   TrustPEM,
+}
+</code></pre>
+<p>其中 <em>cfssl</em> 源获取 CA 证书方法如下：</p>
+<pre><code class="language-go">// transport/roots/cfssl.go
+
+// NewCFSSL produces a new CFSSL root.
+func NewCFSSL(metadata map[string]string) ([]*x509.Certificate, error) {
+	host, ok := metadata["host"]
+	if !ok {
+		return nil, errors.New("transport: CFSSL root provider requires a host")
+	}
+
+	label := metadata["label"]
+	profile := metadata["profile"]
+    // 这里获取不到证书会返回 nil，不会报错
+	cert, err := helpers.LoadClientCertificate(metadata["mutual-tls-cert"], metadata["mutual-tls-key"])
+	if err != nil {
+		return nil, err
+	}
+    // 这里获取不到证书会返回 nil，不会报错
+	remoteCAs, err := helpers.LoadPEMCertPool(metadata["tls-remote-ca"])
+	if err != nil {
+		return nil, err
+	}
+    // 创建 http/https 客户端
+	srv := client.NewServerTLS(host, helpers.CreateTLSConfig(remoteCAs, cert))
+	data, err := json.Marshal(info.Req{Label: label, Profile: profile})
+	if err != nil {
+		return nil, err
+	}
+
+    // 调用 "info" API 接口
+	resp, err := srv.Info(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return helpers.ParseCertificatesPEM([]byte(resp.Certificate))
+}
+</code></pre>
+<p>客户端会调用 2.2.4.1 节的接口。</p>
+<h4>2.3.3. CA Provider</h4>
+<p>又名 Cert Provider。</p>
+<pre><code class="language-go">// A CertificateAuthority is capable of signing certificates given
+// certificate signing requests.
+type CertificateAuthority interface {
+	// SignCSR submits a PKCS #10 certificate signing request to a
+	// CA for signing.
+	SignCSR(csrPEM []byte) (cert []byte, err error)
+
+	// CACertificate returns the certificate authority's
+	// certificate.
+	CACertificate() (cert []byte, err error)
+}
+</code></pre>
+<p>用于与 CA 进行通信。</p>
+<pre><code class="language-go">// transport/ca/cfssl_provider.go
+
+// SignCSR requests a certificate from a CFSSL signer.
+func (cap *CFSSL) SignCSR(csrPEM []byte) (cert []byte, err error) {
+	p, _ := pem.Decode(csrPEM)
+	if p == nil || p.Type != "CERTIFICATE REQUEST" {
+		return nil, errors.New("transport: invalid PEM-encoded certificate signing request")
+	}
+
+	csr, err := x509.ParseCertificateRequest(p.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	// 原来这个地方不支持 SAN URI
+	hosts := make([]string, len(csr.DNSNames), len(csr.DNSNames)+len(csr.IPAddresses)+len(csr.URIs))
+	copy(hosts, csr.DNSNames)
+
+	for i := range csr.IPAddresses {
+		hosts = append(hosts, csr.IPAddresses[i].String())
+	}
+
+	for i := range csr.URIs {
+		hosts = append(hosts, csr.URIs[i].String())
+	}
+
+	sreq := &#x26;signer.SignRequest{
+		Hosts:   hosts,
+		Request: string(csrPEM),
+		Profile: cap.Profile,
+		Label:   cap.Label,
+	}
+
+	out, err := json.Marshal(sreq)
+	if err != nil {
+		return nil, err
+	}
+
+	if cap.provider != nil {
+		return cap.remote.AuthSign(out, nil, cap.provider)
+	}
+
+	return cap.remote.Sign(out)
+}
+</code></pre>
+<p>向 CA 中心发送 CSR 请求。</p>
+<h4>2.3.4. Key Provider</h4>
+<pre><code class="language-go">// transport/kp/key_provider.go
+
+// A KeyProvider provides some mechanism for managing private keys and
+// certificates. It is not required to store the crypto.Signer itself.
+type KeyProvider interface {
+   // Certificate returns the associated certificate, or nil if
+   // one isn't ready.
+   Certificate() *x509.Certificate
+
+   // Given some metadata about a certificate request, the
+   // provider should be able to generate a new CSR.
+   CertificateRequest(*csr.CertificateRequest) ([]byte, error)
+
+   // Check returns an error if the provider has an invalid setup.
+   Check() error
+
+   // Generate should trigger the creation of a new private
+   // key. This will invalidate any certificates stored in the
+   // key provider.
+   Generate(algo string, size int) error
+
+   // Load causes a private key and certificate associated with
+   // this provider to be loaded into memory and be prepared for
+   // use.
+   Load() error
+
+   // Persistent returns true if the provider keeps state on disk.
+   Persistent() bool
+
+   // Ready returns true if the provider has a key and
+   // certificate.
+   Ready() bool
+
+   // SetCertificatePEM takes a PEM-encoded certificate and
+   // associates it with this key provider.
+   SetCertificatePEM([]byte) error
+
+   // SignalFailure is used to notify the KeyProvider that an
+   // error has occurred obtaining a certificate. If this returns
+   // true, the caller should re-attempt to refresh the
+   // keys. This, for example, can be used to implement failover
+   // key providers that require different keys.
+   SignalFailure(err error) bool
+
+   // SignCSR allows a templated CSR to be signed.
+   SignCSR(csr *x509.CertificateRequest) ([]byte, error)
+
+   // Store should perform whatever actions are necessary such
+   // that a call to Load later will reload the key and
+   // certificate associated with this provider.
+   Store() error
+
+   // X509KeyPair returns a tls.Certficate. The returns
+   // tls.Certificate should have a parsed Leaf certificate.
+   X509KeyPair() (tls.Certificate, error)
+}
+</code></pre>
+<p>可以看到 Key Provider 是给 Workload 以生成私钥、CSR、请求证书、持久化的能力。</p>
+<p>我们对该 package 进行了改造，在上层（Capitalizone）进行了重写，以配合 SPIFFE ID 共同工作。</p>
+<h4>2.3.5. 生命周期</h4>
+<p><code>cfssl/transport</code> 包提供了 mTLS 连接的封装，包括证书轮转功能。</p>
+<pre><code class="language-go">// transport/client.go
+
+// A Transport is capable of providing transport-layer security using
+// TLS.
+type Transport struct {
+	// Before defines how long before the certificate expires the
+	// transport should start attempting to refresh the
+	// certificate. For example, if this is 24h, then 24 hours
+	// before the certificate expires the Transport will start
+	// attempting to replace it.
+	Before time.Duration
+
+	// Provider contains a key management provider.
+	Provider kp.KeyProvider
+
+	// CA contains a mechanism for obtaining signed certificates.
+	CA ca.CertificateAuthority
+
+	// TrustStore contains the certificates trusted by this
+	// transport.
+	TrustStore *roots.TrustStore
+
+	// ClientTrustStore contains the certificate authorities to
+	// use in verifying client authentication certificates.
+	ClientTrustStore *roots.TrustStore
+
+	// Identity contains information about the entity that will be
+	// used to construct certificates.
+	Identity *core.Identity
+
+	// Backoff is used to control the behaviour of a Transport
+	// when it is attempting to automatically update a certificate
+	// as part of AutoUpdate.
+	Backoff *backoff.Backoff
+
+	// RevokeSoftFail, if true, will cause a failure to check
+	// revocation (such that the revocation status of a
+	// certificate cannot be checked) to not be treated as an
+	// error.
+	RevokeSoftFail bool
+}
+</code></pre>
+<p>这里同时将描述 mTLS 通信的整个流程。</p>
+<h5>2.3.5.1. 获取证书</h5>
+<blockquote>
+<p>In a TLS handshake, the certificate presented by a remote server is sent alongside the <code>ServerHello</code> message. At this point in the connection, the remote server has received the <code>ClientHello</code> message, and that is all the information it needs to decide which certificate to present to the connecting client.</p>
+</blockquote>
+&#x3C;img src="https://diogomonica.com/content/images/2017/01/begining-tls-handshake-1.png" width="400" />
+<p>ServerHello 阶段会传输证书，这里涉及到一个问题：如何热更新证书。</p>
+<blockquote>
+<p>It turns out that Go supports passing a callback in a TLS Config that will get executed every time a TLS <code>ClientHello</code> is sent by a remote peer. This method is conveniently called <code>GetCertificate</code>, and it returns the certificate we wish to use for that particular TLS handshake.</p>
+<p>The idea of <code>GetCertificate</code> is to allow the dynamic  selection of which certificate to provide to a particular remote peer.  This method can be used to support virtual hosts, where one web server  is responsible for multiple domains, and therefore has to choose the  appropriate certificate to return to each remote peer.</p>
+</blockquote>
+<p>Golang 的 tls 包提供了获取证书的函数支持：</p>
+<pre><code class="language-go">    // GetCertificate returns a Certificate based on the given
+    // ClientHelloInfo. It will only be called if the client supplies SNI
+    // information or if Certificates is empty.
+    //
+    // If GetCertificate is nil or returns nil, then the certificate is
+    // retrieved from NameToCertificate. If NameToCertificate is nil, the
+    // best element of Certificates will be used.
+    GetCertificate func(*ClientHelloInfo) (*Certificate, error) // Go 1.4
+
+    // GetClientCertificate, if not nil, is called when a server requests a
+    // certificate from a client. If set, the contents of Certificates will
+    // be ignored.
+    //
+    // If GetClientCertificate returns an error, the handshake will be
+    // aborted and that error will be returned. Otherwise
+    // GetClientCertificate must return a non-nil Certificate. If
+    // Certificate.Certificate is empty then no certificate will be sent to
+    // the server. If this is unacceptable to the server then it may abort
+    // the handshake.
+    //
+    // GetClientCertificate may be called multiple times for the same
+    // connection if renegotiation occurs or if TLS 1.3 is in use.
+    GetClientCertificate func(*CertificateRequestInfo) (*Certificate, error) // Go 1.8
+</code></pre>
+<p>每次 TLS 握手时，<code>GetCertificate</code> / <code>GetClientCertificate</code> 方法会被调用，我们能够实现这个方法，动态更新证书。</p>
+<p><a href="https://diogomonica.com/2017/01/11/hitless-tls-certificate-rotation-in-go/">示例代码</a>：</p>
+<pre><code class="language-go">type wrappedCertificate struct {
+	sync.Mutex
+	certificate *tls.Certificate
+}
+
+func (c *wrappedCertificate) getCertificate(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	c.Lock()
+	defer c.Unlock()
+
+	return c.certificate, nil
+}
+</code></pre>
+&#x3C;img src="https://diogomonica.com/content/images/2017/01/golang-new-certificate-being-served.png" height="400" />
+<blockquote>
+<p>Old established connections using the previous certificate will remain  active, but new connections coming in to our TLS server will use the  most recent certificate.</p>
+</blockquote>
+<h5>2.3.5.2. 证书轮转</h5>
+<pre><code class="language-go">// transport/client.go
+
+// AutoUpdate will automatically update the listener. If a non-nil
+// certUpdates chan is provided, it will receive timestamps for
+// reissued certificates. If errChan is non-nil, any errors that occur
+// in the updater will be passed along.
+func (tr *Transport) AutoUpdate(certUpdates chan&#x3C;- time.Time, errChan chan&#x3C;- error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Criticalf("AutoUpdate panicked: %v", r)
+		}
+	}()
+
+	for {
+		// Wait until it's time to update the certificate.
+		target := time.Now().Add(tr.Lifespan())
+		if PollInterval == 0 {
+			&#x3C;-time.After(tr.Lifespan())
+		} else {
+			pollWait(target)
+		}
+
+		// Keep trying to update the certificate until it's
+		// ready.
+		for {
+			log.Debugf("attempting to refresh keypair")
+			err := tr.RefreshKeys()
+			if err == nil {
+				break
+			}
+
+			delay := tr.Backoff.Duration()
+			log.Debugf("failed to update certificate, will try again in %s", delay)
+			if errChan != nil {
+				errChan &#x3C;- err
+			}
+
+			&#x3C;-time.After(delay)
+		}
+
+		log.Debugf("certificate updated")
+		if certUpdates != nil {
+			certUpdates &#x3C;- time.Now()
+		}
+
+		tr.Backoff.Reset()
+	}
+}
+</code></pre>
+<p>该方法会保持一个协程运行，检查证书有效时间，定时更新证书。</p>
+<h5>2.3.5.3. CA 证书认证</h5>
+<pre><code class="language-go">// transport/client.go
+
+// TLSClientAuthClientConfig returns a new client authentication TLS
+// configuration that can be used for a client using client auth
+// connecting to the named host.
+func (tr *Transport) TLSClientAuthClientConfig(host string) (*tls.Config, error) {
+	cert, err := tr.getCertificate()
+	if err != nil {
+		return nil, err
+	}
+
+	return &#x26;tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      tr.TrustStore.Pool(),
+		ServerName:   host,
+		CipherSuites: core.CipherSuites,
+		MinVersion:   tls.VersionTLS12,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+	}, nil
+}
+
+// TLSClientAuthServerConfig returns a new client authentication TLS
+// configuration for servers expecting mutually authenticated
+// clients. The clientAuth parameter should contain the root pool used
+// to authenticate clients.
+func (tr *Transport) TLSClientAuthServerConfig() (*tls.Config, error) {
+	logger.DEBUG.Print("------------------------ 获取服务器证书")
+	cert, err := tr.getCertificate()
+	if err != nil {
+		return nil, err
+	}
+
+	logger.DEBUG.Print("------------------------ OK 服务器证书")
+	return &#x26;tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      tr.TrustStore.Pool(),
+		ClientCAs:    tr.ClientTrustStore.Pool(),
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		CipherSuites: core.CipherSuites,
+		MinVersion:   tls.VersionTLS12,
+	}, nil
+}
+</code></pre>
+<p>Server 端和 Client 端的区别在于：</p>
+<ol>
+<li>Server 端 <code>tls.Config</code> 需要 <code>ClientCAs</code> 参数</li>
+<li>Client 端需要 <code>ServerName</code> 参数</li>
+</ol>
+<p>Server 端的  <code>ClientCAs</code> 和 Client 端的 <code>RootCAs</code> 需要包含 Root CA 和 ICA 证书。</p>
+<h5>2.3.5.4. 证书验证</h5>
+<p>除了一般的证书校验以外，Istio 还通过自定义校验方法，进行了 SPIFFE ID 的验证。</p>
+<pre><code class="language-go">    // VerifyPeerCertificate, if not nil, is called after normal
+    // certificate verification by either a TLS client or server. It
+    // receives the raw ASN.1 certificates provided by the peer and also
+    // any verified chains that normal processing found. If it returns a
+    // non-nil error, the handshake is aborted and that error results.
+    //
+    // If normal verification fails then the handshake will abort before
+    // considering this callback. If normal verification is disabled by
+    // setting InsecureSkipVerify, or (for a server) when ClientAuth is
+    // RequestClientCert or RequireAnyClientCert, then this callback will
+    // be considered but the verifiedChains argument will always be nil.
+    VerifyPeerCertificate func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error // Go 1.8
+
+    // VerifyConnection, if not nil, is called after normal certificate
+    // verification and after VerifyPeerCertificate by either a TLS client
+    // or server. If it returns a non-nil error, the handshake is aborted
+    // and that error results.
+    //
+    // If normal verification fails then the handshake will abort before
+    // considering this callback. This callback will run for all connections
+    // regardless of InsecureSkipVerify or ClientAuth settings.
+    VerifyConnection func(ConnectionState) error // Go 1.15
+</code></pre>
+<p><code>VerifyPeerCertificate</code> 里能够提供 SPIFFE 的认证，<code>VerifyConnection</code> 能够通过 SDK 提供自定义认证。</p></article><script src="/_next/static/chunks/webpack-072f062dc024cc52.js" async=""></script><script>(self.__next_f=self.__next_f||[]).push([0])</script><script>self.__next_f.push([1,"1:\"$Sreact.fragment\"\n2:I[5803,[],\"\"]\n3:I[695,[],\"\"]\n5:I[2576,[],\"OutletBoundary\"]\n7:I[2576,[],\"MetadataBoundary\"]\n9:I[2576,[],\"ViewportBoundary\"]\nb:I[7614,[],\"\"]\n:HL[\"/_next/static/css/c3b55921f92a131e.css\",\"style\"]\n"])</script><script>self.__next_f.push([1,"0:{\"P\":null,\"b\":\"n66w3jQXdD0TOkFlxRfSe\",\"p\":\"\",\"c\":[\"\",\"2021\",\"11\",\"cfssl-%25E6%25A0%25B8%25E5%25BF%2583%25E6%25A8%25A1%25E5%259D%2597%25E5%2588%2586%25E6%259E%2590\"],\"i\":false,\"f\":[[[\"\",{\"children\":[\"(posts)\",{\"children\":[[\"year\",\"2021\",\"d\"],{\"children\":[[\"month\",\"11\",\"d\"],{\"children\":[[\"slug\",\"cfssl-%25E6%25A0%25B8%25E5%25BF%2583%25E6%25A8%25A1%25E5%259D%2597%25E5%2588%2586%25E6%259E%2590\",\"d\"],{\"children\":[\"__PAGE__\",{}]}]}]}]}]},\"$undefined\",\"$undefined\",true],[\"\",[\"$\",\"$1\",\"c\",{\"children\":[[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/css/c3b55921f92a131e.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"}]],[\"$\",\"html\",null,{\"children\":[\"$\",\"body\",null,{\"className\":\"antialiased\",\"children\":[\"$\",\"$L2\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L3\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":[[],[[\"$\",\"title\",null,{\"children\":\"404: This page could not be found.\"}],[\"$\",\"div\",null,{\"style\":{\"fontFamily\":\"system-ui,\\\"Segoe UI\\\",Roboto,Helvetica,Arial,sans-serif,\\\"Apple Color Emoji\\\",\\\"Segoe UI Emoji\\\"\",\"height\":\"100vh\",\"textAlign\":\"center\",\"display\":\"flex\",\"flexDirection\":\"column\",\"alignItems\":\"center\",\"justifyContent\":\"center\"},\"children\":[\"$\",\"div\",null,{\"children\":[[\"$\",\"style\",null,{\"dangerouslySetInnerHTML\":{\"__html\":\"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}\"}}],[\"$\",\"h1\",null,{\"className\":\"next-error-h1\",\"style\":{\"display\":\"inline-block\",\"margin\":\"0 20px 0 0\",\"padding\":\"0 23px 0 0\",\"fontSize\":24,\"fontWeight\":500,\"verticalAlign\":\"top\",\"lineHeight\":\"49px\"},\"children\":404}],[\"$\",\"div\",null,{\"style\":{\"display\":\"inline-block\"},\"children\":[\"$\",\"h2\",null,{\"style\":{\"fontSize\":14,\"fontWeight\":400,\"lineHeight\":\"49px\",\"margin\":0},\"children\":\"This page could not be found.\"}]}]]}]}]]],\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\"}]}]}]]}],{\"children\":[\"(posts)\",[\"$\",\"$1\",\"c\",{\"children\":[null,[\"$\",\"$L2\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\",\"(posts)\",\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L3\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":[[],[[\"$\",\"title\",null,{\"children\":\"404: This page could not be found.\"}],[\"$\",\"div\",null,{\"style\":\"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:style\",\"children\":[\"$\",\"div\",null,{\"children\":[[\"$\",\"style\",null,{\"dangerouslySetInnerHTML\":{\"__html\":\"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}\"}}],[\"$\",\"h1\",null,{\"className\":\"next-error-h1\",\"style\":\"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:children:props:children:1:props:style\",\"children\":404}],[\"$\",\"div\",null,{\"style\":\"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:children:props:children:2:props:style\",\"children\":[\"$\",\"h2\",null,{\"style\":\"$0:f:0:1:1:props:children:1:props:children:props:children:props:notFound:1:1:props:children:props:children:2:props:children:props:style\",\"children\":\"This page could not be found.\"}]}]]}]}]]],\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\"}]]}],{\"children\":[[\"year\",\"2021\",\"d\"],[\"$\",\"$1\",\"c\",{\"children\":[null,[\"$\",\"$L2\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\",\"(posts)\",\"children\",\"$0:f:0:1:2:children:2:children:0\",\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L3\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":\"$undefined\",\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\"}]]}],{\"children\":[[\"month\",\"11\",\"d\"],[\"$\",\"$1\",\"c\",{\"children\":[null,[\"$\",\"$L2\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\",\"(posts)\",\"children\",\"$0:f:0:1:2:children:2:children:0\",\"children\",\"$0:f:0:1:2:children:2:children:2:children:0\",\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L3\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":\"$undefined\",\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\"}]]}],{\"children\":[[\"slug\",\"cfssl-%25E6%25A0%25B8%25E5%25BF%2583%25E6%25A8%25A1%25E5%259D%2597%25E5%2588%2586%25E6%259E%2590\",\"d\"],[\"$\",\"$1\",\"c\",{\"children\":[null,[\"$\",\"$L2\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\",\"(posts)\",\"children\",\"$0:f:0:1:2:children:2:children:0\",\"children\",\"$0:f:0:1:2:children:2:children:2:children:0\",\"children\",\"$0:f:0:1:2:children:2:children:2:children:2:children:0\",\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L3\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":\"$undefined\",\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\"}]]}],{\"children\":[\"__PAGE__\",[\"$\",\"$1\",\"c\",{\"children\":[\"$L4\",null,[\"$\",\"$L5\",null,{\"children\":\"$L6\"}]]}],{},null,false]},null,false]},null,false]},null,false]},null,false]},null,false],[\"$\",\"$1\",\"h\",{\"children\":[null,[\"$\",\"$1\",\"3khdmbivPA7JrEzH2HTgF\",{\"children\":[[\"$\",\"$L7\",null,{\"children\":\"$L8\"}],[\"$\",\"$L9\",null,{\"children\":\"$La\"}],null]}]]}],false]],\"m\":\"$undefined\",\"G\":[\"$b\",\"$undefined\"],\"s\":false,\"S\":true}\n"])</script><script>self.__next_f.push([1,"a:[[\"$\",\"meta\",\"0\",{\"name\":\"viewport\",\"content\":\"width=device-width, initial-scale=1\"}]]\n8:[[\"$\",\"meta\",\"0\",{\"charSet\":\"utf-8\"}],[\"$\",\"title\",\"1\",{\"children\":\"Mayo Rocks!\"}],[\"$\",\"meta\",\"2\",{\"name\":\"description\",\"content\":\"Mayo's Blog\"}],[\"$\",\"link\",\"3\",{\"rel\":\"icon\",\"href\":\"/icon.png?14d5a92fbe70e82a\",\"type\":\"image/png\",\"sizes\":\"460x460\"}]]\n"])</script><script>self.__next_f.push([1,"6:null\n"])</script><script>self.__next_f.push([1,"c:T1043b,"])</script><script>self.__next_f.push([1,"\u003ch2\u003e1. 概述\u003c/h2\u003e\n\u003ch3\u003e1.1. 项目简介\u003c/h3\u003e\n\u003cp\u003e\u003cem\u003ecfssl\u003c/em\u003e 是 Cloudflare 的 PKI，也是证书生成的工具链。\u003cem\u003ecfssl\u003c/em\u003e 作为证书生成的工具链可能更为人熟知，Google 上搜索到的关于 \u003cem\u003ecfssl\u003c/em\u003e 的介绍以及使用都是关于使用 CLI 生成自签名证书的，几乎没有针对 \u003cem\u003ecfssl\u003c/em\u003e 作为 CA 中心的介绍。\u003c/p\u003e\n\u003cp\u003e从 commit 历史来看这是一个 7 年前就启动的项目，项目中的文档大部分还是 \u003cem\u003e.txt\u003c/em\u003e 后缀的纯文本。但是项目的完成度很高，内部 CA 实现了多层级，能够引入外部 CA，包括提供了调用 CA API 的 Go 的 Client 包，以及用于证书轮换的 KeyProvider package。\u003c/p\u003e\n\u003cp\u003e以及有 Cloudflare 官方的 certmgr 项目，用于在 K8s 集群中使用 cfssl 自动签发证书，该项目描述中提到在 CF 的生成环境使用。说到此处本人想到 CF 在其域名托管的服务中有免费 TLS 证书生成，包含 Origin、Browser 证书，或许是使用该项目进行生成的。\u003c/p\u003e\n\u003cp\u003e但是项目更新速度比较慢，本人提的 2 个 Pull Request 等了一周只被合并了一个，另一个 feature 类型的 PR 还在等待审核。\u003c/p\u003e\n\u003cp\u003e\u003cem\u003eIstio\u003c/em\u003e 最开始也是使用 \u003cem\u003ecfssl\u003c/em\u003e 生成自签名 CA 证书，但是由于 \u003cem\u003eIstio\u003c/em\u003e 内部需要实现 SDS 协议、兼容 SPIFFE ID 标准，在后续的迭代中使用了自己的 PKI 将其替换了。\u003c/p\u003e\n\u003cp\u003e\u003cem\u003ecfssl\u003c/em\u003e 官方 master 分支的代码不能完全满足我们的需求，例如不兼容 SAN URI 字段的证书签发，证书轮换客户端使用过于繁琐……但是基于 \u003cem\u003ecfssl\u003c/em\u003e 我们能够快速实现一个业界标准的，完备的 PKI、CA 中心。\u003c/p\u003e\n\u003ch3\u003e1.2. 项目结构\u003c/h3\u003e\n\u003cp\u003e\u003cem\u003ecfssl\u003c/em\u003e 由一组组工具包组成，功能较为独立，因此也能够方便的从其他项目引用这些包。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-bash\"\u003e$ tree -d -L 1 -A\n.\n├── api\n├── auth\n├── bundler\n├── certdb\n├── certinfo\n├── cli\n├── cmd\n├── config\n├── crl\n├── crypto\n├── csr\n├── doc\n├── errors\n├── helpers\n├── info\n├── initca\n├── log\n├── multiroot\n├── ocsp\n├── revoke\n├── scan\n├── selfsign\n├── signer\n├── testdata\n├── transport\n├── ubiquity\n├── vendor\n└── whitelist\n\n28 directories\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch2\u003e2. 源码分析\u003c/h2\u003e\n\u003cp\u003e由于市面上的 Golang PKI 程序目录结构都是一个个包组成的，例如 \u003ca href=\"https://github.com/letsencrypt/boulder\"\u003eletsencrypt/boulder\u003c/a\u003e 项目，这里通过流程分析更清晰。\u003c/p\u003e\n\u003ch3\u003e2.0. 架构设计\u003c/h3\u003e\n\u003ch4\u003e2.0.1. Profiles\u003c/h4\u003e\n\u003cp\u003e\u003cem\u003ecfssl\u003c/em\u003e 的配置以 \u003cem\u003eprofile\u003c/em\u003e 区分，这里看一个\u003cstrong\u003eCA 中心\u003c/strong\u003e示例配置：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-json\"\u003e{\n  \"signing\": {\n    \"default\": {\n      \"expiry\": \"168h\"\n    },\n    \"profiles\": {\n      \"client\": {\n        \"expiry\": \"1h\",\n        \"usages\": [\n          \"signing\",\n          \"key encipherment\",\n          \"client auth\"\n        ]\n      },\n      \"server\": {\n        \"expiry\": \"1h\",\n        \"usages\": [\n          \"signing\",\n          \"key encipherment\",\n          \"server auth\"\n        ]\n      }\n    }\n  }\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e根据 profile name 区分不同的签名类型。\u003c/p\u003e\n\u003cp\u003e我们再来看通过 SDK 连接 CA 中心的配置文件：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-json\"\u003e{\n  \"request\": {\n    \"CN\": \"test server\",\n    \"hosts\": [\n      \"127.0.0.1\"\n    ]\n  },\n  \"profiles\": {\n    \"paths\": {\n      \"private_key\": \"server.key\",\n      \"certificate\": \"server.pem\"\n    },\n    \"cfssl\": {\n      \"profile\": \"server\",\n      \"remote\": \"127.0.0.1:8888\"\n    }\n  },\n  \"roots\": [\n    {\n      \"type\": \"system\"\n    }\n  ],\n  \"client_roots\": [\n    {\n      \"type\": \"cfssl\",\n      \"metadata\": {\n        \"host\": \"127.0.0.1:8888\",\n        \"profile\": \"client\"\n      }\n    }\n  ]\n}\n\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003eCA 中心会根据 profile 不同，使用不同的配置去处理请求、签发证书。\u003c/p\u003e\n\u003ch4\u003e2.0.2. 认证体系\u003c/h4\u003e\n\u003cp\u003e\u003cem\u003ecfssl\u003c/em\u003e 支持使用 mTLS，以及 Auth Key 来进行身份验证。\u003c/p\u003e\n\u003cp\u003e其中 Auth Key 支持 \u003ccode\u003estandard\u003c/code\u003e 和 \u003ccode\u003estandard-ip\u003c/code\u003e 两种类型。\u003c/p\u003e\n\u003cp\u003eCA 中心配置示例：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-json\"\u003e{\n  \"auth_keys\": {\n    \"client\": {\n      \"type\": \"standard\",\n      \"key\": \"52abb3ac91971bb72bce17e7a289cd04476490b19e0d8eb7810dc42d4ac16c41\"\n    },\n    \"server\": {\n      \"type\": \"standard\",\n      \"key\": \"4f4f26686209f672e0ec7b19cbbc8b6d94fdd12cc0b20326f9005d5f234e6e3e\"\n    }\n  },\n  \"signing\": {\n    \"default\": {\n      \"expiry\": \"168h\"\n    },\n    \"profiles\": {\n      \"client\": {\n        \"auth_key\": \"client\",\n        \"expiry\": \"1h\",\n        \"usages\": [\n          \"signing\",\n          \"key encipherment\",\n          \"client auth\"\n        ]\n      },\n      \"server\": {\n        \"auth_key\": \"server\",\n        \"expiry\": \"8760h\",\n        \"usages\": [\n          \"signing\",\n          \"key encipherment\",\n          \"server auth\"\n        ]\n      }\n    }\n  }\n}\n\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003eSDK 客户端配置示例：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-json\"\u003e{\n  \"request\": {\n    \"CN\": \"test server\",\n    \"hosts\": [\"127.0.0.1\"]\n  },\n  \"profiles\": {\n    \"paths\": {\n      \"private_key\": \"server.key\",\n      \"certificate\": \"server.pem\"\n    },\n    \"cfssl\": {\n      \"profile\": \"server\",\n      \"remote\": \"127.0.0.1:8888\",\n      \"auth-type\": \"standard\",\n      \"auth-key\": \"4f4f26686209f672e0ec7b19cbbc8b6d94fdd12cc0b20326f9005d5f234e6e3e\"\n    }\n  },\n  \"roots\": [{\n    \"type\": \"system\"\n  }],\n  \"client_roots\": [{\n    \"type\": \"cfssl\",\n    \"metadata\": {\n      \"host\": \"127.0.0.1:8888\",\n      \"profile\": \"client\"\n    }\n  }]\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch3\u003e2.1. 证书管理\u003c/h3\u003e\n\u003cp\u003e我们从一组官方给出的示例 shell 当作入口来看：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-bash\"\u003e#!/bin/sh\n\ncfssl gencert -initca ca.json | cfssljson -bare ca\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e\u003ccode\u003eca.json\u003c/code\u003e 文件内容：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-json\"\u003e{\n  \"hosts\": [\n    \"dropsonde.net\"\n  ],\n  \"key\": {\n    \"algo\": \"rsa\",\n    \"size\": 4096\n  },\n  \"names\": [\n    {\n      \"C\": \"US\",\n      \"L\": \"San Francisco\",\n      \"OU\": \"Dropsonde Certificate Authority\",\n      \"ST\": \"California\"\n    }\n  ]\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e\u003ccode\u003ecfssl gencert\u003c/code\u003e 命令注释：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003evar gencertUsageText = `cfssl gencert -- generate a new key and signed certificate\n\nUsage of gencert:\n    Generate a new key and cert from CSR:\n        cfssl gencert -initca CSRJSON\n        cfssl gencert -ca cert -ca-key key [-config config] [-profile profile] [-hostname hostname] CSRJSON\n        cfssl gencert -remote remote_host [-config config] [-profile profile] [-label label] [-hostname hostname] CSRJSON\n\n    Re-generate a CA cert with the CA key and CSR:\n        cfssl gencert -initca -ca-key key CSRJSON\n\n    Re-generate a CA cert with the CA key and certificate:\n        cfssl gencert -renewca -ca cert -ca-key key\n\nArguments:\n        CSRJSON:    JSON file containing the request, use '-' for reading JSON from stdin\n\nFlags:\n`\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch4\u003e2.1.1. 生成私钥\u003c/h4\u003e\n\u003cp\u003e\u003ccode\u003e-initca\u003c/code\u003e 参数表示是 CA。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// cli/gencert/gencert.go\n\n// 创建默认 CSR 请求\nreq := csr.CertificateRequest{\n   // 默认使用 ecdsa, 256 生成 private key\n   KeyRequest: csr.NewKeyRequest(),\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e\u003cem\u003ecfssl\u003c/em\u003e 中默认使用 ECDSA with \u003cem\u003ecurve P-256\u003c/em\u003e 算法生成私钥。\u003c/p\u003e\n\u003cp\u003e以下摘自 \u003ca href=\"https://tools.ietf.org/html/rfc6605\"\u003erfc6605\u003c/a\u003e (Elliptic Curve Digital Signature Algorithm (DSA) for DNSSEC)\u003c/p\u003e\n\u003cblockquote\u003e\n\u003cp\u003eCurrent estimates are that ECDSA with curve P-256 has an approximate\nequivalent strength to RSA with 3072-bit keys.  Using ECDSA with\ncurve P-256 in DNSSEC has some advantages and disadvantages relative\nto using RSA with SHA-256 and with 3072-bit keys.  ECDSA keys are\nmuch shorter than RSA keys; at this size, the difference is 256\nversus 3072 bits.  Similarly, ECDSA signatures are much shorter than\nRSA signatures.  This is relevant because DNSSEC stores and transmits\nboth keys and signatures.\u003c/p\u003e\n\u003c/blockquote\u003e\n\u003cp\u003eIn the two signing algorithms defined in this document, the size of\nthe key for the elliptic curve is matched with the size of the output\nof the hash algorithm.  This design is based on the widespread belief\nthat the equivalent strength of P-256 and P-384 is half the length of\nthe key, and also that the equivalent strength of SHA-256 and SHA-384\nis half the length of the key.  Using matched strengths prevents an\nattacker from choosing the weaker half of a signature algorithm.  For\nexample, in a signature that uses RSA with 2048-bit keys and SHA-256,\nthe signing portion is significantly weaker than the hash portion,\nwhereas the two algorithms here are balanced.\u003c/p\u003e\n\u003cp\u003eSigning with ECDSA is significantly faster than with RSA (over 20\ntimes in some implementations).  However, validating RSA signatures\nis significantly faster than validating ECDSA signatures (about 5\ntimes faster in some implementations).\u003c/p\u003e\n\u003cp\u003eECDSA with curve P-256 与 RSA with SHA-256 强度相当；前者签名速度快于后者，后者验证速度快于前者。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// csr/csr.go\n\n// Generate generates a key as specified in the request. Currently,\n// only ECDSA and RSA are supported.\nfunc (kr *KeyRequest) Generate() (crypto.PrivateKey, error) {\n\tlog.Debugf(\"generate key from request: algo=%s, size=%d\", kr.Algo(), kr.Size())\n\tswitch kr.Algo() {\n\tcase \"rsa\":\n\t\tif kr.Size() \u0026#x3C; 2048 {\n\t\t\treturn nil, errors.New(\"RSA key is too weak\")\n\t\t}\n\t\tif kr.Size() \u003e 8192 {\n\t\t\treturn nil, errors.New(\"RSA key size too large\")\n\t\t}\n\t\treturn rsa.GenerateKey(rand.Reader, kr.Size())\n\tcase \"ecdsa\":\n\t\tvar curve elliptic.Curve\n\t\tswitch kr.Size() {\n\t\tcase curveP256:\n\t\t\tcurve = elliptic.P256()\n\t\tcase curveP384:\n\t\t\tcurve = elliptic.P384()\n\t\tcase curveP521:\n\t\t\tcurve = elliptic.P521()\n\t\tdefault:\n\t\t\treturn nil, errors.New(\"invalid curve\")\n\t\t}\n\t\t// 调用官方包生成私钥\n\t\treturn ecdsa.GenerateKey(curve, rand.Reader)\n\tdefault:\n\t\treturn nil, errors.New(\"invalid algorithm\")\n\t}\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e私钥转换为 PEM 格式：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// csr/csr.go\n\n\t// 私钥转换成 pem 格式\n\tswitch priv := priv.(type) {\n\tcase *rsa.PrivateKey:\n\t\tkey = x509.MarshalPKCS1PrivateKey(priv)\n\t\tblock := pem.Block{\n\t\t\tType:  \"RSA PRIVATE KEY\",\n\t\t\tBytes: key,\n\t\t}\n\t\tkey = pem.EncodeToMemory(\u0026#x26;block)\n\tcase *ecdsa.PrivateKey:\n\t\tkey, err = x509.MarshalECPrivateKey(priv)\n\t\tif err != nil {\n\t\t\terr = cferr.Wrap(cferr.PrivateKeyError, cferr.Unknown, err)\n\t\t\treturn\n\t\t}\n\t\tblock := pem.Block{\n\t\t\tType:  \"EC PRIVATE KEY\",\n\t\t\tBytes: key,\n\t\t}\n\t\tkey = pem.EncodeToMemory(\u0026#x26;block)\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch4\u003e2.1.2. 生成 CSR\u003c/h4\u003e\n\u003cp\u003e\u003ccode\u003ecsr, err = Generate(priv.(crypto.Signer), req)\u003c/code\u003e\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// 根据私钥和请求参数生成标准 CSR\n// Generate creates a new CSR from a CertificateRequest structure and\n// an existing key. The KeyRequest field is ignored.\nfunc Generate(priv crypto.Signer, req *CertificateRequest) (csr []byte, err error) {\n\t// 获取 x509 签名算法\n\tsigAlgo := helpers.SignerAlgo(priv)\n\tif sigAlgo == x509.UnknownSignatureAlgorithm {\n\t\treturn nil, cferr.New(cferr.PrivateKeyError, cferr.Unavailable)\n\t}\n\n\t// csr 模板\n\tvar tpl = x509.CertificateRequest{\n\t\tSubject:            req.Name(), // 填充 subject 字段\n\t\tSignatureAlgorithm: sigAlgo,\n\t}\n\n\t// 解析填充 SAN 字段\n\tfor i := range req.Hosts {\n\t\tif ip := net.ParseIP(req.Hosts[i]); ip != nil {\n\t\t\ttpl.IPAddresses = append(tpl.IPAddresses, ip)\n\t\t} else if email, err := mail.ParseAddress(req.Hosts[i]); err == nil \u0026#x26;\u0026#x26; email != nil {\n\t\t\ttpl.EmailAddresses = append(tpl.EmailAddresses, email.Address)\n\t\t} else if uri, err := url.ParseRequestURI(req.Hosts[i]); err == nil \u0026#x26;\u0026#x26; uri != nil {\n\t\t\ttpl.URIs = append(tpl.URIs, uri)\n\t\t} else {\n\t\t\ttpl.DNSNames = append(tpl.DNSNames, req.Hosts[i])\n\t\t}\n\t}\n\n\ttpl.ExtraExtensions = []pkix.Extension{}\n\n    ...\n\n\t// 调用 x509 包生成 csr\n\tcsr, err = x509.CreateCertificateRequest(rand.Reader, \u0026#x26;tpl, priv)\n\tif err != nil {\n\t\tlog.Errorf(\"failed to generate a CSR: %v\", err)\n\t\terr = cferr.Wrap(cferr.CSRError, cferr.BadRequest, err)\n\t\treturn\n\t}\n\tblock := pem.Block{\n\t\tType:  \"CERTIFICATE REQUEST\",\n\t\tBytes: csr,\n\t}\n\n\tlog.Info(\"encoded CSR\")\n\t// 生成 pem 格式 csr\n\tcsr = pem.EncodeToMemory(\u0026#x26;block)\n\treturn\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e\u003ccode\u003ecsr.Generate()\u003c/code\u003e 接收的 Request 参数实际上是作为 CSR 的模板。\u003c/p\u003e\n\u003cp\u003e此处与 Istio PKI 中生成 CSR 的函数相似，感兴趣的也可以查看本人的《Istio 安全模块解析》文档。\u003c/p\u003e\n\u003cp\u003e实际开发过程中发现此处有坑，\u003cem\u003ecfssl\u003c/em\u003e 此处虽然支持了 SAN URI 的字段，但是在通过 cfssl CA Provider 发送 CSR　请求证书的时候，其服务端不支持 SAN URI 字段到证书的填充。针对这一点我已经提交了 Pull Requst。\u003c/p\u003e\n\u003cp\u003e我们在实际开发中，使用创建 CSR 请求的包是来自 Istio PKI 的，其提供了更便捷的使用方式。\u003c/p\u003e\n\u003ch4\u003e2.1.3. Signer\u003c/h4\u003e\n\u003ch5\u003e2.1.3.1. 本地自签名\u003c/h5\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// initca/initca.go\n\n// 创建本地自签名 signer\ns, err := local.NewSigner(priv, nil, signer.DefaultSigAlgo(priv), policy)\nif err != nil {\n\tlog.Errorf(\"failed to create signer: %v\", err)\n\treturn\n}\n\nsignReq := signer.SignRequest{Hosts: req.Hosts, Request: string(csrPEM)}\ncert, err = s.Sign(signReq)\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch5\u003e2.1.3.2. Universal\u003c/h5\u003e\n\u003cp\u003e设置 Remote CA，或通过 Server 启动时，会创建 Universal Signer。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// SignerFromConfigAndDB takes the Config and creates the appropriate\n// signer.Signer object with a specified db\nfunc SignerFromConfigAndDB(c cli.Config, db *sqlx.DB) (signer.Signer, error) {\n   // If there is a config, use its signing policy. Otherwise create a default policy.\n   var policy *config.Signing\n   if c.CFG != nil {\n      policy = c.CFG.Signing\n   } else {\n      policy = \u0026#x26;config.Signing{\n         Profiles: map[string]*config.SigningProfile{},\n         Default:  config.DefaultConfig(),\n      }\n   }\n\n   // Make sure the policy reflects the new remote\n   if c.Remote != \"\" {\n      err := policy.OverrideRemotes(c.Remote)\n      if err != nil {\n         log.Infof(\"Invalid remote %v, reverting to configuration default\", c.Remote)\n         return nil, err\n      }\n   }\n\n   if c.MutualTLSCertFile != \"\" \u0026#x26;\u0026#x26; c.MutualTLSKeyFile != \"\" {\n      err := policy.SetClientCertKeyPairFromFile(c.MutualTLSCertFile, c.MutualTLSKeyFile)\n      if err != nil {\n         log.Infof(\"Invalid mutual-tls-cert: %s or mutual-tls-key: %s, defaulting to no client auth\", c.MutualTLSCertFile, c.MutualTLSKeyFile)\n         return nil, err\n      }\n      log.Infof(\"Using client auth with mutual-tls-cert: %s and mutual-tls-key: %s\", c.MutualTLSCertFile, c.MutualTLSKeyFile)\n   }\n\n   if c.TLSRemoteCAs != \"\" {\n      err := policy.SetRemoteCAsFromFile(c.TLSRemoteCAs)\n      if err != nil {\n         log.Infof(\"Invalid tls-remote-ca: %s, defaulting to system trust store\", c.TLSRemoteCAs)\n         return nil, err\n      }\n      log.Infof(\"Using trusted CA from tls-remote-ca: %s\", c.TLSRemoteCAs)\n   }\n\n   s, err := universal.NewSigner(cli.RootFromConfig(\u0026#x26;c), policy)\n   if err != nil {\n      return nil, err\n   }\n\n   if db != nil {\n      dbAccessor := certsql.NewAccessor(db)\n      s.SetDBAccessor(dbAccessor)\n   }\n\n   return s, nil\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e这里可以看到能够设置 TLS 客户端证书、信任的 CA 证书，以及 DB。\u003c/p\u003e\n\u003cp\u003e这些配置项都是从文件读取的，后续开发过程中我考虑会改成配置项获取流程：\u003c/p\u003e\n\u003col\u003e\n\u003cli\u003e从 ENV 获取配置项\u003c/li\u003e\n\u003cli\u003e从数据库获取自身 CA 证书、没有则创建 CA 证书\u003c/li\u003e\n\u003cli\u003e将证书写入临时文件，将临时文件地址传入 cfssl 配置项\u003c/li\u003e\n\u003c/ol\u003e\n\u003cp\u003e尽量减少修改源代码的工程量，保持最大的社区兼容性。\u003c/p\u003e\n\u003ch5\u003e2.1.3.3. Remote\u003c/h5\u003e\n\u003cp\u003e\u003cem\u003ecfssl\u003c/em\u003e 配置远程证书签发，\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// Helper function to perform a remote sign or info request.\nfunc (s *Signer) remoteOp(req interface{}, profile, target string) (resp interface{}, err error) {\n   jsonData, err := json.Marshal(req)\n   if err != nil {\n      return nil, cferr.Wrap(cferr.APIClientError, cferr.JSONError, err)\n   }\n\n   p, err := signer.Profile(s, profile)\n   if err != nil {\n      return\n   }\n\n   server := client.NewServerTLS(p.RemoteServer, helpers.CreateTLSConfig(p.RemoteCAs, p.ClientCert))\n   if server == nil {\n      return nil, cferr.Wrap(cferr.PolicyError, cferr.InvalidRequest,\n         errors.New(\"failed to connect to remote\"))\n   }\n\n   server.SetReqModifier(s.reqModifier)\n\n   // There's no auth provider for the \"info\" method\n   if target == \"info\" {\n      resp, err = server.Info(jsonData)\n   } else if p.RemoteProvider != nil {\n      resp, err = server.AuthSign(jsonData, nil, p.RemoteProvider)\n   } else {\n      resp, err = server.Sign(jsonData)\n   }\n\n   if err != nil {\n      return nil, err\n   }\n\n   return\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e涉及到使用 Remote CA 的操作会使用 \u003cem\u003ecfssl/api\u003c/em\u003e 包，调用远程 CA 接口处理。\u003c/p\u003e\n\u003ch4\u003e2.1.4. 证书处理\u003c/h4\u003e\n\u003ch5\u003e2.1.4.1. Pre-Issuance Linting\u003c/h5\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// signer/local/local.go\n\n\tvar lintPriv crypto.Signer\n\t// If there is at least one profile (including the default) that configures\n\t// pre-issuance linting then generate the one-off lintPriv key.\n\tfor _, profile := range policy.Profiles {\n\t\tif profile.LintErrLevel \u003e 0 || policy.Default.LintErrLevel \u003e 0 {\n\t\t\t// In the future there may be demand for specifying the type of signer used\n\t\t\t// for pre-issuance linting in configuration. For now we assume that signing\n\t\t\t// with a randomly generated P-256 ECDSA private key is acceptable for all cases\n\t\t\t// where linting is requested.\n\t\t\tk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)\n\t\t\tif err != nil {\n\t\t\t\treturn nil, cferr.New(cferr.PrivateKeyError, cferr.GenerationFailed)\n\t\t\t}\n\t\t\tlintPriv = k\n\t\t\tbreak\n\t\t}\n\t}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003epre-issuance linting 即预签发校验，\u003ca href=\"https://wiki.mozilla.org/CA/Required_or_Recommended_Practices#Pre-Issuance_Linting\"\u003eMozilla CA\u003c/a\u003e 对此的解释是：\u003c/p\u003e\n\u003cblockquote\u003e\n\u003cp\u003eRecently, several tools have been developed (\u003ca href=\"https://github.com/awslabs/certlint\"\u003ecertlint/cablint\u003c/a\u003e, \u003ca href=\"https://github.com/kroeckx/x509lint\"\u003ex509lint\u003c/a\u003e, \u003ca href=\"https://github.com/zmap/zlint\"\u003ezlint\u003c/a\u003e) which can check a tbsCertificate (To Be Signed Certificate - the  certificate complete except for the signature) for a large number of  standards violations (BRs, RFCs etc.). It is strongly recommended that  CAs integrate such tools into their issuance pipelines such that  issuance is, minimally, held up for manual review if an error or warning is found. Because BR or RFC violations are generally considered by  Mozilla to be misissuance, such integration will reduce the number of  misissuance events a CA experiences, if earlier parts of their pipeline  fail in their job of keeping certificates compliant.\u003c/p\u003e\n\u003c/blockquote\u003e\n\u003cp\u003e\u003cem\u003ecfssl\u003c/em\u003e 在 \u003ca href=\"https://github.com/cloudflare/cfssl/issues/1008\"\u003eIssue #1008\u003c/a\u003e 中增加对证书 lint 的支持。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// signer/local/local.go\n\n// lint performs pre-issuance linting of a given TBS certificate template when\n// the provided errLevel is \u003e 0. Note that the template is provided by-value and\n// not by-reference. This is important as the lint function needs to mutate the\n// template's signature algorithm to match the lintPriv.\nfunc (s *Signer) lint(template x509.Certificate, errLevel lint.LintStatus, lintRegistry lint.Registry) error {\n\t// Always return nil when linting is disabled (lint.Reserved == 0).\n\tif errLevel == lint.Reserved {\n\t\treturn nil\n\t}\n\t// without a lintPriv key to use to sign the tbsCertificate we can't lint it.\n\tif s.lintPriv == nil {\n\t\treturn cferr.New(cferr.PrivateKeyError, cferr.Unavailable)\n\t}\n\n\t// The template's SignatureAlgorithm must be mutated to match the lintPriv or\n\t// x509.CreateCertificate will error because of the mismatch. At the time of\n\t// writing s.lintPriv is always an ECDSA private key. This switch will need to\n\t// be expanded if the lint key type is made configurable.\n\tswitch s.lintPriv.(type) {\n\tcase *ecdsa.PrivateKey:\n\t\ttemplate.SignatureAlgorithm = x509.ECDSAWithSHA256\n\tdefault:\n\t\treturn cferr.New(cferr.PrivateKeyError, cferr.KeyMismatch)\n\t}\n\n\tprelintBytes, err := x509.CreateCertificate(rand.Reader, \u0026#x26;template, s.ca, template.PublicKey, s.lintPriv)\n\tif err != nil {\n\t\treturn cferr.Wrap(cferr.CertificateError, cferr.Unknown, err)\n\t}\n\tprelintCert, err := zx509.ParseCertificate(prelintBytes)\n\tif err != nil {\n\t\treturn cferr.Wrap(cferr.CertificateError, cferr.ParseFailed, err)\n\t}\n\terrorResults := map[string]lint.LintResult{}\n\tresults := zlint.LintCertificateEx(prelintCert, lintRegistry)\n\tfor name, res := range results.Results {\n\t\tif res.Status \u003e errLevel {\n\t\t\terrorResults[name] = *res\n\t\t}\n\t}\n\tif len(errorResults) \u003e 0 {\n\t\treturn \u0026#x26;LintError{\n\t\t\tErrorResults: errorResults,\n\t\t}\n\t}\n\treturn nil\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e自签名时调用 zlint 进行证书合法性校验。\u003c/p\u003e\n\u003ch5\u003e2.1.4.2. 证书模板\u003c/h5\u003e\n\u003cp\u003eCSR 模板处理：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// signer/local/local.go\n\n\t// 解析 CSR 模板\n\tcsrTemplate, err := signer.ParseCertificateRequest(s, profile, block.Bytes)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\t// Copy out only the fields from the CSR authorized by policy.\n\tsafeTemplate := x509.Certificate{}\n\t// If the profile contains no explicit whitelist, assume that all fields\n\t// should be copied from the CSR.\n\tif profile.CSRWhitelist == nil {\n\t\tsafeTemplate = *csrTemplate\n\t} else {\n\t\t// 如果设置了 CSR 模板白名单，则只放行白名单里的字段\n\t\tif profile.CSRWhitelist.Subject {\n\t\t\tsafeTemplate.Subject = csrTemplate.Subject\n\t\t}\n\t\tif profile.CSRWhitelist.PublicKeyAlgorithm {\n\t\t\tsafeTemplate.PublicKeyAlgorithm = csrTemplate.PublicKeyAlgorithm\n\t\t}\n\t\tif profile.CSRWhitelist.PublicKey {\n\t\t\tsafeTemplate.PublicKey = csrTemplate.PublicKey\n\t\t}\n\t\tif profile.CSRWhitelist.SignatureAlgorithm {\n\t\t\tsafeTemplate.SignatureAlgorithm = csrTemplate.SignatureAlgorithm\n\t\t}\n\t\tif profile.CSRWhitelist.DNSNames {\n\t\t\tsafeTemplate.DNSNames = csrTemplate.DNSNames\n\t\t}\n\t\tif profile.CSRWhitelist.IPAddresses {\n\t\t\tsafeTemplate.IPAddresses = csrTemplate.IPAddresses\n\t\t}\n\t\tif profile.CSRWhitelist.EmailAddresses {\n\t\t\tsafeTemplate.EmailAddresses = csrTemplate.EmailAddresses\n\t\t}\n\t\tif profile.CSRWhitelist.URIs {\n\t\t\tsafeTemplate.URIs = csrTemplate.URIs\n\t\t}\n\t}\n\n\t...\n\n\t// 用 hosts 字段覆盖 SAN\n\tOverrideHosts(\u0026#x26;safeTemplate, req.Hosts)\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e生成证书序列号：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e\t\t// RFC 5280 4.1.2.2:\n\t\t// Certificate users MUST be able to handle serialNumber\n\t\t// values up to 20 octets.  Conforming CAs MUST NOT use\n\t\t// serialNumber values longer than 20 octets.\n\t\t//\n\t\t// If CFSSL is providing the serial numbers, it makes\n\t\t// sense to use the max supported size.\n\t\tserialNumber := make([]byte, 20)\n\t\t_, err = io.ReadFull(rand.Reader, serialNumber)\n\t\tif err != nil {\n\t\t\treturn nil, cferr.Wrap(cferr.CertificateError, cferr.Unknown, err)\n\t\t}\n\n\t\t// SetBytes interprets buf as the bytes of a big-endian\n\t\t// unsigned integer. The leading byte should be masked\n\t\t// off to ensure it isn't negative.\n\t\tserialNumber[0] \u0026#x26;= 0x7F\n\n\t\tsafeTemplate.SerialNumber = new(big.Int).SetBytes(serialNumber)\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e填充证书特殊字段：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// signer/signer.go\n\n\t// 证书 OCSP 字段来自配置的 Profile OCSP URL\n\tif ocspURL = profile.OCSP; ocspURL == \"\" {\n\t\tocspURL = defaultProfile.OCSP\n\t}\n\n\tif template.IsCA {\n\t\ttemplate.MaxPathLen = profile.CAConstraint.MaxPathLen\n\t\tif template.MaxPathLen == 0 {\n\t\t\ttemplate.MaxPathLenZero = profile.CAConstraint.MaxPathLenZero\n\t\t}\n\t\t// 如果是 CA 证书，则没有 SAN 字段\n\t\ttemplate.DNSNames = nil\n\t\ttemplate.EmailAddresses = nil\n\t\ttemplate.URIs = nil\n\t}\n\n\t// 若设置 OCSP No Check\n\tif profile.OCSPNoCheck {\n\t\tocspNoCheckExtension := pkix.Extension{\n\t\t\tId:       asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 48, 1, 5},\n\t\t\tCritical: false,\n\t\t\tValue:    []byte{0x05, 0x00},\n\t\t}\n\t\ttemplate.ExtraExtensions = append(template.ExtraExtensions, ocspNoCheckExtension)\n\t}\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch5\u003e2.1.4.3. 签名证书\u003c/h5\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// signer/local/local.go\nfunc (s *Signer) sign(template *x509.Certificate, lintErrLevel lint.LintStatus, lintRegistry lint.Registry) (cert []byte, err error) {\n   var initRoot bool\n   // 没有指定 cert\n   if s.ca == nil {\n      // 不是 ca 证书则报错\n      if !template.IsCA {\n         err = cferr.New(cferr.PolicyError, cferr.InvalidRequest)\n         return\n      }\n      // ca 证书没有 SAN 字段\n      template.DNSNames = nil\n      template.EmailAddresses = nil\n      template.URIs = nil\n      s.ca = template\n      initRoot = true\n   }\n\n   if err := s.lint(*template, lintErrLevel, lintRegistry); err != nil {\n      return nil, err\n   }\n\n   // 签名证书\n   derBytes, err := x509.CreateCertificate(rand.Reader, template, s.ca, template.PublicKey, s.priv)\n   if err != nil {\n      return nil, cferr.Wrap(cferr.CertificateError, cferr.Unknown, err)\n   }\n   if initRoot {\n      s.ca, err = x509.ParseCertificate(derBytes)\n      if err != nil {\n         return nil, cferr.Wrap(cferr.CertificateError, cferr.ParseFailed, err)\n      }\n   }\n\n   cert = pem.EncodeToMemory(\u0026#x26;pem.Block{Type: \"CERTIFICATE\", Bytes: derBytes})\n   log.Infof(\"signed certificate with serial number %d\", template.SerialNumber)\n   return\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch5\u003e2.1.4.4. 数据库储存\u003c/h5\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// 如果设置了 DB 储存\nif s.dbAccessor != nil {\n   now := time.Now()\n   var certRecord = certdb.CertificateRecord{\n      Serial: certTBS.SerialNumber.String(),\n      // this relies on the specific behavior of x509.CreateCertificate\n      // which sets the AuthorityKeyId from the signer's SubjectKeyId\n      AKI:        hex.EncodeToString(parsedCert.AuthorityKeyId),\n      CALabel:    req.Label,\n      Status:     \"good\",\n      Expiry:     certTBS.NotAfter,\n      PEM:        string(signedCert),\n      IssuedAt:   \u0026#x26;now,\n      NotBefore:  \u0026#x26;certTBS.NotBefore,\n      CommonName: sql.NullString{String: certTBS.Subject.CommonName, Valid: true},\n   }\n\n   if err := certRecord.SetMetadata(req.Metadata); err != nil {\n      return nil, err\n   }\n   if err := certRecord.SetSANs(certTBS.DNSNames); err != nil {\n      return nil, err\n   }\n\n   // 在数据库创建一条 row\n   if err := s.dbAccessor.InsertCertificate(certRecord); err != nil {\n      return nil, err\n   }\n   log.Debug(\"saved certificate with serial number \", certTBS.SerialNumber)\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch4\u003e2.1.4. 导出文件\u003c/h4\u003e\n\u003cp\u003e\u003cem\u003ecfssljson\u003c/em\u003e Cmd 工作为接收请求返回，并将其通过 Pipeline 解析，输出到文件。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// cmd/cfssljson/cfssljson.go\nfunc readFile(filespec string) ([]byte, error) {\n\tif filespec == \"-\" {\n\t\t// 若参数为 \"-\"，则从 stdin 获取\n\t\treturn ioutil.ReadAll(os.Stdin)\n\t}\n\treturn ioutil.ReadFile(filespec)\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e解析成对应格式的文件并输出。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e\tif contents, ok := input[\"cert\"]; ok {\n\t\tcert = contents.(string)\n\t} else if contents, ok = input[\"certificate\"]; ok {\n\t\tcert = contents.(string)\n\t}\n\tif cert != \"\" {\n\t\touts = append(outs, outputFile{\n\t\t\tFilename: baseName + \".pem\",\n\t\t\tContents: cert,\n\t\t\tPerms:    0664,\n\t\t})\n\t}\n\n\tif contents, ok := input[\"key\"]; ok {\n\t\tkey = contents.(string)\n\t} else if contents, ok = input[\"private_key\"]; ok {\n\t\tkey = contents.(string)\n\t}\n\tif key != \"\" {\n\t\touts = append(outs, outputFile{\n\t\t\tFilename: baseName + \"-key.pem\",\n\t\t\tContents: key,\n\t\t\tPerms:    0600,\n\t\t})\n\t}\n\n\tfor _, e := range outs {\n\t\tif *output {\n\t\t\tif e.IsBinary {\n\t\t\t\te.Contents = base64.StdEncoding.EncodeToString([]byte(e.Contents))\n\t\t\t}\n\t\t\tfmt.Fprintf(os.Stdout, \"%s\\n\", e.Contents)\n\t\t} else {\n\t\t\twriteFile(e.Filename, e.Contents, e.Perms)\n\t\t}\n\t}\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch4\u003e2.1.5. 证书 Bundle\u003c/h4\u003e\n\u003cblockquote\u003e\n\u003cp\u003e\u003cstrong\u003eCA bundle\u003c/strong\u003e is a file that contains root and  intermediate certificates. The end-entity certificate along with a CA  bundle constitutes the certificate chain.\u003c/p\u003e\n\u003c/blockquote\u003e\n\u003cp\u003eHow do I make CA-bundle file from CRT files?\u003c/p\u003e\n\u003cp\u003eThere are a few *.crt files in your package:\u003c/p\u003e\n\u003cul\u003e\n\u003cli\u003e\u003cstrong\u003eAddTrustExternalCARoot.crt\u003c/strong\u003e - Root CA Certificate\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003eCOMODORSAAddTrustCA.crt\u003c/strong\u003e - Intermediate CA Certificate 1\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003eCOMODORSADomainValidationSecureServerCA.crt\u003c/strong\u003e - Intermediate CA Certificate 2\u003c/li\u003e\n\u003cli\u003e\u003cstrong\u003eyourDomain.crt\u003c/strong\u003e - Your SSL Certificate\u003c/li\u003e\n\u003c/ul\u003e\n\u003cp\u003eCA-bundle is a file that contains root and intermediate certificates in the right order. The order must be:\u003c/p\u003e\n\u003cp\u003e- Intermediate CA Certificate 2\u003c/p\u003e\n\u003cp\u003e- Intermediate CA Certificate 1\u003c/p\u003e\n\u003cp\u003e- Root CA Certificate\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-bash\"\u003e$ cat ComodoRSADomainValidationSecureServerCA.crt ComodoRSAAddTrustCA.crt AddTrustExternalCARoot.crt \u003e yourDomain.ca-bundle\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e\u003cem\u003ecfssl bundle\u003c/em\u003e 命令只用于生成包含 end-entry 证书的证书链，但在我们实际使用中，在 Workload 间传输的只是 Workload 证书，不会传输 CA 证书。\u003c/p\u003e\n\u003ch3\u003e2.2. CA Server\u003c/h3\u003e\n\u003ch4\u003e2.2.1. 启动\u003c/h4\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// serverMain is the command line entry point to the API server. It sets up a\n// new HTTP server to handle sign, bundle, and validate requests.\nfunc serverMain(args []string, c cli.Config) error {\n\t\n    ...\n\n    // 初始化 signer\n\tif s, err = sign.SignerFromConfigAndDB(c, db); err != nil {\n\t\tlog.Warningf(\"couldn't initialize signer: %v\", err)\n\t}\n\n    // 初始化 ocsp signer\n\tif ocspSigner, err = ocspsign.SignerFromConfig(c); err != nil {\n\t\tlog.Warningf(\"couldn't initialize ocsp signer: %v\", err)\n\t}\n\n    // 注册 api handler\n\tregisterHandlers()\n\n\taddr := net.JoinHostPort(conf.Address, strconv.Itoa(conf.Port))\n\n\ttlscfg := tls.Config{}\n\tif conf.MinTLSVersion != \"\" {\n\t\ttlscfg.MinVersion = helpers.StringTLSVersion(conf.MinTLSVersion)\n\t}\n\n\tif conf.TLSCertFile == \"\" || conf.TLSKeyFile == \"\" {\n\t\tlog.Info(\"Now listening on \", addr)\n\t\treturn http.ListenAndServe(addr, nil)\n\t}\n\n    ...\n\treturn server.ListenAndServeTLS(conf.TLSCertFile, conf.TLSKeyFile)\n\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e启动时流程：\u003c/p\u003e\n\u003col\u003e\n\u003cli\u003e创建 Signer，参考 2.1.3 节\u003c/li\u003e\n\u003cli\u003e注册 API Handler，处理 HTTP 请求\u003c/li\u003e\n\u003cli\u003e启动 HTTP / TLS 服务器（支持 mTLS）\u003c/li\u003e\n\u003c/ol\u003e\n\u003ch4\u003e2.2.2. 注册 API Handler\u003c/h4\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// cli/serve/serve.go\n\nvar endpoints = map[string]func() (http.Handler, error){\n\t\"sign\": func() (http.Handler, error) {\n\t\tif s == nil {\n\t\t\treturn nil, errBadSigner\n\t\t}\n\n\t\th, err := signhandler.NewHandlerFromSigner(s)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tif conf.CABundleFile != \"\" \u0026#x26;\u0026#x26; conf.IntBundleFile != \"\" {\n\t\t\tsh := h.Handler.(*signhandler.Handler)\n\t\t\tif err := sh.SetBundler(conf.CABundleFile, conf.IntBundleFile); err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}\n\t\t}\n\n\t\treturn h, nil\n\t},\n\n\t\"authsign\": func() (http.Handler, error) {\n\t\tif s == nil {\n\t\t\treturn nil, errBadSigner\n\t\t}\n\n\t\th, err := signhandler.NewAuthHandlerFromSigner(s)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tif conf.CABundleFile != \"\" \u0026#x26;\u0026#x26; conf.IntBundleFile != \"\" {\n\t\t\tsh := h.(*api.HTTPHandler).Handler.(*signhandler.AuthHandler)\n\t\t\tif err := sh.SetBundler(conf.CABundleFile, conf.IntBundleFile); err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}\n\t\t}\n\n\t\treturn h, nil\n\t},\n\n\t\"info\": func() (http.Handler, error) {\n\t\tif s == nil {\n\t\t\treturn nil, errBadSigner\n\t\t}\n\t\treturn info.NewHandler(s)\n\t},\n\n\t\"crl\": func() (http.Handler, error) {\n\t\tif s == nil {\n\t\t\treturn nil, errBadSigner\n\t\t}\n\n\t\tif db == nil {\n\t\t\treturn nil, errNoCertDBConfigured\n\t\t}\n\n\t\treturn crl.NewHandler(certsql.NewAccessor(db), conf.CAFile, conf.CAKeyFile)\n\t},\n\n\t\"gencrl\": func() (http.Handler, error) {\n\t\tif s == nil {\n\t\t\treturn nil, errBadSigner\n\t\t}\n\t\treturn gencrl.NewHandler(), nil\n\t},\n\n\t\"newcert\": func() (http.Handler, error) {\n\t\tif s == nil {\n\t\t\treturn nil, errBadSigner\n\t\t}\n\t\th := generator.NewCertGeneratorHandlerFromSigner(generator.CSRValidate, s)\n\t\tif conf.CABundleFile != \"\" \u0026#x26;\u0026#x26; conf.IntBundleFile != \"\" {\n\t\t\tcg := h.(api.HTTPHandler).Handler.(*generator.CertGeneratorHandler)\n\t\t\tif err := cg.SetBundler(conf.CABundleFile, conf.IntBundleFile); err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}\n\t\t}\n\t\treturn h, nil\n\t},\n\n\t\"bundle\": func() (http.Handler, error) {\n\t\treturn bundle.NewHandler(conf.CABundleFile, conf.IntBundleFile)\n\t},\n\n\t\"newkey\": func() (http.Handler, error) {\n\t\treturn generator.NewHandler(generator.CSRValidate)\n\t},\n\n\t\"init_ca\": func() (http.Handler, error) {\n\t\treturn initca.NewHandler(), nil\n\t},\n\n\t\"scan\": func() (http.Handler, error) {\n\t\treturn scan.NewHandler(conf.CABundleFile)\n\t},\n\n\t\"scaninfo\": func() (http.Handler, error) {\n\t\treturn scan.NewInfoHandler(), nil\n\t},\n\n\t\"certinfo\": func() (http.Handler, error) {\n\t\tif db != nil {\n\t\t\treturn certinfo.NewAccessorHandler(certsql.NewAccessor(db)), nil\n\t\t}\n\n\t\treturn certinfo.NewHandler(), nil\n\t},\n\n\t\"ocspsign\": func() (http.Handler, error) {\n\t\tif ocspSigner == nil {\n\t\t\treturn nil, errBadSigner\n\t\t}\n\t\treturn apiocsp.NewHandler(ocspSigner), nil\n\t},\n\n\t\"revoke\": func() (http.Handler, error) {\n\t\tif db == nil {\n\t\t\treturn nil, errNoCertDBConfigured\n\t\t}\n\t\treturn revoke.NewHandler(certsql.NewAccessor(db)), nil\n\t},\n\n\t\"/\": func() (http.Handler, error) {\n\t\tif err := staticBox.findStaticBox(); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\treturn http.FileServer(staticBox), nil\n\t},\n\n\t\"health\": func() (http.Handler, error) {\n\t\treturn health.NewHealthCheck(), nil\n\t},\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch4\u003e2.2.3. OCSP\u003c/h4\u003e\n\u003cblockquote\u003e\n\u003cp\u003ePartly to combat these scalability issues, OCSP was introduced. OCSP  provides on-demand answers about the revocation status of a given  certificate. An OCSP responder is a service that returns signed answers  to the question \"is this certificate revoked?\". The response is either  \"Yes\" or \"No\". Each response is signed by the CA and has a validity  period so the client knows how long to cache the response.\u003c/p\u003e\n\u003cp\u003eCFSSL now has an OCSP responder service that can be configured to run in a distributed way, without access to the CA. There are also OCSP  management tools in CFSSL to automatically populate the data for the  OCSP responder and keep it fresh using the certificate database.\u003c/p\u003e\n\u003c/blockquote\u003e\n\u003cp\u003e\u003cimg src=\"https://blog.cloudflare.com/content/images/2016/03/image_8.png\" alt=\"refreshing the OCSP responder\"\u003e\u003c/p\u003e\n\u003cp\u003eOCSP 签名，和 OCSP 返回是独立的程序，利于分布式部署。\u003c/p\u003e\n\u003ch5\u003e2.2.3.1. OCSP Responder\u003c/h5\u003e\n\u003cp\u003e介绍：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// Usage text of 'cfssl serve'\nvar ocspServerUsageText = `cfssl ocspserve -- set up an HTTP server that handles OCSP requests from either a file or directly from a database (see RFC 5019)\n\n  Usage of ocspserve:\n          cfssl ocspserve [-address address] [-port port] [-responses file] [-db-config db-config]\n\n  Flags:\n  `\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003eOCSP Server 能够在自定义的 Path 上启动：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e\tlog.Info(\"Registering OCSP responder handler\")\n\thttp.Handle(c.Path, ocsp.NewResponder(src, nil))\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e\u003cem\u003ecfssl\u003c/em\u003e OCSP 处理请求接口：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// ocsp/responder.go\n\n// A Responder can process both GET and POST requests.  The mapping\n// from an OCSP request to an OCSP response is done by the Source;\n// the Responder simply decodes the request, and passes back whatever\n// response is provided by the source.\n// Note: The caller must use http.StripPrefix to strip any path components\n// (including '/') on GET requests.\n// Do not use this responder in conjunction with http.NewServeMux, because the\n// default handler will try to canonicalize path components by changing any\n// strings of repeated '/' into a single '/', which will break the base64\n// encoding.\nfunc (rs Responder) ServeHTTP(response http.ResponseWriter, request *http.Request) {\n\n\t...\n    \n\t// Parse response as an OCSP request\n\t// XXX: This fails if the request contains the nonce extension.\n\t//      We don't intend to support nonces anyway, but maybe we\n\t//      should return unauthorizedRequest instead of malformed.\n\tocspRequest, err := ocsp.ParseRequest(requestBody)\n\n    ...\n    \n\t// Look up OCSP response from source\n\tocspResponse, headers, err := rs.Source.Response(ocspRequest)\n\n    ...\n    \n\tparsedResponse, err := ocsp.ParseResponse(ocspResponse, nil)\n\n    ...\n\n\tresponse.WriteHeader(http.StatusOK)\n\tresponse.Write(ocspResponse)\n}\n\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003eOCSP 返回的内容实际上直接从数据库读取后返回：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// ocsp/responder.go\n\n// Response implements cfssl.ocsp.responder.Source, which returns the\n// OCSP response in the Database for the given request with the expiration\n// date furthest in the future.\nfunc (src DBSource) Response(req *ocsp.Request) ([]byte, http.Header, error) {\n\t...\n\trecords, err := src.Accessor.GetOCSP(strSN, aki)\n\t...\n\treturn []byte(cur.Body), nil, nil\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// GetOCSP retrieves a certdb.OCSPRecord from db by serial.\nfunc (d *Accessor) GetOCSP(serial, aki string) (ors []certdb.OCSPRecord, err error) {\n\terr = d.checkDB()\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\terr = d.db.Select(\u0026#x26;ors, fmt.Sprintf(d.db.Rebind(selectOCSPSQL), sqlstruct.Columns(certdb.OCSPRecord{})), serial, aki)\n\tif err != nil {\n\t\treturn nil, wrapSQLError(err)\n\t}\n\n\treturn ors, nil\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch5\u003e2.2.3.2. OCSP Sign\u003c/h5\u003e\n\u003cp\u003eOCSP 签名和返回是分开的，并且不会在创建证书一并创建。\u003c/p\u003e\n\u003cp\u003e\u003cimg src=\"/images/2021-11-01-07.png\" alt=\"\"\u003e场景1：OCSP 签名会在证书被吊销时创建。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// cli/ocsprefresh/ocsprefresh.go\n\n// ocsprefreshMain is the main CLI of OCSP refresh functionality.\nfunc ocsprefreshMain(args []string, c cli.Config) error {\n   ...\n\n\ts, err := SignerFromConfig(c)\n\tif err != nil {\n\t\tlog.Critical(\"Unable to create OCSP signer: \", err)\n\t\treturn err\n\t}\n\n\tdb, err := dbconf.DBFromConfig(c.DBConfigFile)\n\tif err != nil {\n\t\treturn err\n\t}\n\n\tdbAccessor := sql.NewAccessor(db)\n\tcerts, err := dbAccessor.GetUnexpiredCertificates()\n\tif err != nil {\n\t\treturn err\n\t}\n\n\t// Set an expiry timestamp for all certificates refreshed in this batch\n\tocspExpiry := time.Now().Add(c.Interval)\n\tfor _, certRecord := range certs {\n\t\tcert, err := helpers.ParseCertificatePEM([]byte(certRecord.PEM))\n\t\tif err != nil {\n\t\t\tlog.Critical(\"Unable to parse certificate: \", err)\n\t\t\treturn err\n\t\t}\n\n\t\treq := ocsp.SignRequest{\n\t\t\tCertificate: cert,\n\t\t\tStatus:      certRecord.Status,\n\t\t}\n\n\t\tif certRecord.Status == \"revoked\" {\n\t\t\treq.Reason = int(certRecord.Reason)\n\t\t\treq.RevokedAt = certRecord.RevokedAt\n\t\t}\n\n\t\tresp, err := s.Sign(req)\n\t\tif err != nil {\n\t\t\tlog.Critical(\"Unable to sign OCSP response: \", err)\n\t\t\treturn err\n\t\t}\n\n\t\terr = dbAccessor.UpsertOCSP(cert.SerialNumber.String(), hex.EncodeToString(cert.AuthorityKeyId), string(resp), ocspExpiry)\n\t\tif err != nil {\n\t\t\tlog.Critical(\"Unable to save OCSP response: \", err)\n\t\t\treturn err\n\t\t}\n\t}\n\n\treturn nil\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e场景2：通过 \u003ccode\u003ecfssl ocsprefresh\u003c/code\u003e 命令执行。\u003c/p\u003e\n\u003cp\u003e二次开发时可以考虑将 OCSP 记录在签发证书时进行创建。\u003c/p\u003e\n\u003ch4\u003e2.2.4. API Client\u003c/h4\u003e\n\u003cp\u003e\u003ccode\u003eapi/client\u003c/code\u003e 包实现了 cfssl 的 API 客户端。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// A Remote points to at least one (but possibly multiple) remote\n// CFSSL instances. It must be able to perform a authenticated and\n// unauthenticated certificate signing requests, return information\n// about the CA on the other end, and return a list of the hosts that\n// are used by the remote.\ntype Remote interface {\n   AuthSign(req, id []byte, provider auth.Provider) ([]byte, error)\n   Sign(jsonData []byte) ([]byte, error)\n   Info(jsonData []byte) (*info.Resp, error)\n   Hosts() []string\n   SetReqModifier(func(*http.Request, []byte))\n   SetRequestTimeout(d time.Duration)\n   SetProxy(func(*http.Request) (*url.URL, error))\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e主要功能为 API 接口和参数的封装。会在下一节中被用到。\u003c/p\u003e\n\u003ch5\u003e2.2.4.1. 获取 CA 证书\u003c/h5\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// signer/local/local.go\n\n// 获取 CA Info\n// Info return a populated info.Resp struct or an error.\nfunc (s *Signer) Info(req info.Req) (resp *info.Resp, err error) {\n\tcert, err := s.Certificate(req.Label, req.Profile)\n\tif err != nil {\n\t\treturn\n\t}\n\n\tprofile, err := signer.Profile(s, req.Profile)\n\tif err != nil {\n\t\treturn\n\t}\n\n\tresp = new(info.Resp)\n\tif cert.Raw != nil {\n\t\tresp.Certificate = string(bytes.TrimSpace(pem.EncodeToMemory(\u0026#x26;pem.Block{Type: \"CERTIFICATE\", Bytes: cert.Raw})))\n\t}\n\tresp.Usage = profile.Usage\n\tresp.ExpiryString = profile.ExpiryString\n\n\treturn\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e返回服务端的 CA 证书，该证书会用在 Client 的 TrustRoot 中。\u003c/p\u003e\n\u003cp\u003e问题点：Root CA 证书没有被加载到程序中，需要在服务端增加 Root 证书的返回值。\u003c/p\u003e\n\u003ch4\u003e2.2.5. 证书吊销\u003c/h4\u003e\n\u003ch5\u003e2.2.5.1. 吊销接口\u003c/h5\u003e\n\u003cp\u003e证书吊销接口支持三个参数：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-sql\"\u003eUPDATE certificates\n\tSET status='revoked', revoked_at=CURRENT_TIMESTAMP, reason=:reason\n\tWHERE (serial_number = :serial_number AND authority_key_identifier = :authority_key_identifier);\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e证书序列号和 AKI 定位一个证书。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// api/revoke/revoke.go\n\n\t// If we were given a signer, try and generate an OCSP\n\t// response indicating revocation\n\tif h.Signer != nil {\n\t\t// TODO: should these errors be errors?\n\t\t// Grab the certificate from the database\n\t\tcr, err := h.dbAccessor.GetCertificate(req.Serial, req.AKI)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tif len(cr) != 1 {\n\t\t\treturn errors.NewBadRequestString(\"No unique certificate found\")\n\t\t}\n\n\t\tcert, err := helpers.ParseCertificatePEM([]byte(cr[0].PEM))\n\t\tif err != nil {\n\t\t\treturn errors.NewBadRequestString(\"Unable to parse certificates from PEM data\")\n\t\t}\n\n\t\tsr := ocsp.SignRequest{\n\t\t\tCertificate: cert,\n\t\t\tStatus:      \"revoked\",\n\t\t\tReason:      reasonCode,\n\t\t\tRevokedAt:   time.Now().UTC(),\n\t\t}\n\n\t\tocspResponse, err := h.Signer.Sign(sr)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\n\t\t// We parse the OCSP response in order to get the next\n\t\t// update time/expiry time\n\t\tocspParsed, err := stdocsp.ParseResponse(ocspResponse, nil)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\n\t\tocspRecord := certdb.OCSPRecord{\n\t\t\tSerial: req.Serial,\n\t\t\tAKI:    req.AKI,\n\t\t\tBody:   string(ocspResponse),\n\t\t\tExpiry: ocspParsed.NextUpdate,\n\t\t}\n\n\t\tif err = h.dbAccessor.InsertOCSP(ocspRecord); err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e证书吊销时会进行 OCSP 签名，创建一个吊销状态的 OCSP Response。\u003c/p\u003e\n\u003ch5\u003e2.2.5.2. 查询证书吊销\u003c/h5\u003e\n\u003cp\u003e证书吊销没有主动通知机制，如何感应到证书已经被吊销？\u003c/p\u003e\n\u003cp\u003e\u003ca href=\"https://github.com/snowflakedb/gosnowflake/issues/5\"\u003ehttps://github.com/snowflakedb/gosnowflake/issues/5\u003c/a\u003e\u003c/p\u003e\n\u003cblockquote\u003e\n\u003cp\u003eHere are the steps to implement the revocation checks with OCSP:\u003c/p\u003e\n\u003cul\u003e\n\u003cli\u003eCheck if certificate validation can be intercepted to add revocation checks (Yes. TLSClientConfig including verifyPeerCertificate can be  injected in Client)\u003c/li\u003e\n\u003cli\u003eExtract OCSP URL from the certificate\u003c/li\u003e\n\u003cli\u003eMake sure OCSP Request can be composed.\u003c/li\u003e\n\u003cli\u003eMake sure a simple roundtrip with OCSP server returns OCSP Response and can be decoded.\u003c/li\u003e\n\u003cli\u003eMake sure OCSP Response can include enough information to validate the revocation status.\u003c/li\u003e\n\u003cli\u003eImplement concurrent OCSP round trips for chained certificates.\u003c/li\u003e\n\u003cli\u003eImplement caching the results in a cache directory\u003c/li\u003e\n\u003c/ul\u003e\n\u003c/blockquote\u003e\n\u003cp\u003e通过实现 \u003ccode\u003etls.Config.VerifyPeerCertificate\u003c/code\u003e 方法，我们可以自定义实现 OCSP 查询：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e    // VerifyPeerCertificate, if not nil, is called after normal\n    // certificate verification by either a TLS client or server. It\n    // receives the raw ASN.1 certificates provided by the peer and also\n    // any verified chains that normal processing found. If it returns a\n    // non-nil error, the handshake is aborted and that error results.\n    //\n    // If normal verification fails then the handshake will abort before\n    // considering this callback. If normal verification is disabled by\n    // setting InsecureSkipVerify, or (for a server) when ClientAuth is\n    // RequestClientCert or RequireAnyClientCert, then this callback will\n    // be considered but the verifiedChains argument will always be nil.\n    VerifyPeerCertificate func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error // Go 1.8\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e认证 OCSP 的示例代码 \u003ca href=\"https://github.com/snowflakedb/gosnowflake/blob/master/ocsp.go%EF%BC%9A\"\u003ehttps://github.com/snowflakedb/gosnowflake/blob/master/ocsp.go：\u003c/a\u003e\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// verifyPeerCertificate verifies all of certificate revocation status\nfunc verifyPeerCertificate(ctx context.Context, verifiedChains [][]*x509.Certificate) (err error) {\n\tfor i := 0; i \u0026#x3C; len(verifiedChains); i++ {\n\t\t// Certificate signed by Root CA. This should be one before the last in the Certificate Chain\n\t\tnumberOfNoneRootCerts := len(verifiedChains[i]) - 1\n\t\tif !verifiedChains[i][numberOfNoneRootCerts].IsCA || string(verifiedChains[i][numberOfNoneRootCerts].RawIssuer) != string(verifiedChains[i][numberOfNoneRootCerts].RawSubject) {\n\t\t\t// Check if the last Non Root Cert is also a CA or is self signed.\n\t\t\t// if the last certificate is not, add it to the list\n\t\t\trca := caRoot[string(verifiedChains[i][numberOfNoneRootCerts].RawIssuer)]\n\t\t\tif rca == nil {\n\t\t\t\treturn fmt.Errorf(\"failed to find root CA. pkix.name: %v\", verifiedChains[i][numberOfNoneRootCerts].Issuer)\n\t\t\t}\n\t\t\tverifiedChains[i] = append(verifiedChains[i], rca)\n\t\t\tnumberOfNoneRootCerts++\n\t\t}\n\t\tresults := getAllRevocationStatus(ctx, verifiedChains[i])\n\t\tif r := canEarlyExitForOCSP(results, numberOfNoneRootCerts); r != nil {\n\t\t\treturn r.err\n\t\t}\n\t}\n\n\tocspResponseCacheLock.Lock()\n\tif cacheUpdated {\n\t\twriteOCSPCacheFile()\n\t}\n\tcacheUpdated = false\n\tocspResponseCacheLock.Unlock()\n\treturn nil\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch3\u003e2.3. Transport\u003c/h3\u003e\n\u003cp\u003e我称呼它为 Workload SDK。\u003c/p\u003e\n\u003cp\u003e我们后续的 Workload SDK 是基于此包修改而来。本质上与 Istio Pilot Agent 的 CA Client 类似。\u003c/p\u003e\n\u003cp\u003e\u003cimg src=\"https://blog.cloudflare.com/content/images/2016/03/image_3.png\" alt=\"Certificate Issuance\"\u003e\u003c/p\u003e\n\u003cp\u003e我发现上图中 cfssl 把 \"OCSP\" 写成了 \"OSCP\"，🤣。\u003c/p\u003e\n\u003ch4\u003e2.3.1. 配置项\u003c/h4\u003e\n\u003cp\u003e配置项作为一个特性，在 CFSSL 的官方文档中被提到。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e{\n  \"request\": {\n    \"CN\": \"test server\",\n    \"hosts\": [\"127.0.0.1\"]\n  },\n  \"profiles\": {\n    \"paths\": {\n      \"private_key\": \"server.key\",\n      \"certificate\": \"server.pem\"\n    },\n    \"cfssl\": {\n      \"profile\": \"server\",\n      \"remote\": \"127.0.0.1:8888\",\n      \"auth-type\": \"standard\",\n      \"auth-key\": \"4f4f26686209f672e0ec7b19cbbc8b6d94fdd12cc0b20326f9005d5f234e6e3e\"\n    }\n  },\n  \"roots\": [{\n    \"type\": \"system\"\n  }],\n  \"client_roots\": [{\n    \"type\": \"cfssl\",\n    \"metadata\": {\n      \"host\": \"127.0.0.1:8888\",\n      \"profile\": \"client\"\n    }\n  }]\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e\u003ccode\u003eroots\u003c/code\u003e 以及 \u003ccode\u003eclient_roots\u003c/code\u003e 是用来配置 System Trust Store 和 Client Trust Store 的。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e\t// TrustStore contains the certificates trusted by this\n\t// transport.\n\tTrustStore *roots.TrustStore\n\n\t// ClientTrustStore contains the certificate authorities to\n\t// use in verifying client authentication certificates.\n\tClientTrustStore *roots.TrustStore\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch4\u003e2.3.2. TrustStore\u003c/h4\u003e\n\u003cblockquote\u003e\n\u003cp\u003eA \u003cstrong\u003eTrustStore\u003c/strong\u003e holds the certificates of external systems that you trust. So a \u003cstrong\u003eTrustStore\u003c/strong\u003e is a KeyStore file, that contains the public keys/certificate of external hosts that you trust.\u003c/p\u003e\n\u003c/blockquote\u003e\n\u003ch5\u003e2.3.2.1. System Cert Pool\u003c/h5\u003e\n\u003cp\u003e\u003cem\u003ecfssl\u003c/em\u003e 源码中将 Golang 官方 x509 包中 system 部分 copy 到了 \u003ccode\u003etransport/roots/system\u003c/code\u003e 目录下，用于创建系统信任的 CA 证书池，但没有对 Windows 进行处理，导致在 Windows 上出现报错。\u003c/p\u003e\n\u003cp\u003e我对其进行了更改，其功能没有发生变化，但不会出现编译报错：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// transport/roots/system.go\n\nfunc NewSystem(_ map[string]string) ([]*x509.Certificate, error) {\n\tvar certs []*x509.Certificate\n\tcertpool, err := x509.SystemCertPool()\n\tif err != nil {\n\t\t// 返回 nil，否则 panic\n\t\treturn nil, nil\n\t}\n\tfor _, pem := range certpool.Subjects() {\n\t\tcert, err := helpers.ParseCertificatesPEM(pem)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tcerts = append(certs, cert...)\n\t}\n\treturn certs, nil\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e查看 Golang 官方 x509 包中：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003efunc SystemCertPool() (*CertPool, error) {\n\tif runtime.GOOS == \"windows\" {\n\t\t// Issue 16736, 18609:\n\t\treturn nil, errors.New(\"crypto/x509: system root pool is not available on Windows\")\n\t}\n\t...\n\treturn loadSystemRoots()\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003eWindows 获取不到 system root pool。\u003c/p\u003e\n\u003cp\u003eLinux 中的系统内置 CA 证书在：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// Copyright 2015 The Go Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage x509\n\n// Possible certificate files; stop after finding one.\nvar certFiles = []string{\n    \"/etc/ssl/certs/ca-certificates.crt\",                // Debian/Ubuntu/Gentoo etc.\n    \"/etc/pki/tls/certs/ca-bundle.crt\",                  // Fedora/RHEL 6\n    \"/etc/ssl/ca-bundle.pem\",                            // OpenSUSE\n    \"/etc/pki/tls/cacert.pem\",                           // OpenELEC\n    \"/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem\", // CentOS/RHEL 7\n    \"/etc/ssl/cert.pem\",                                 // Alpine Linux\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003ch5\u003e2.3.2.2. 获取 CA 证书\u003c/h5\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// transport/roots/provider.go\n\n// A TrustStore contains a pool of certificate that are trusted for a\n// given TLS configuration.\ntype TrustStore struct {\n   roots map[string]*x509.Certificate\n}\n\n// New produces a new trusted root provider from a collection of\n// roots. If there are no roots, the system roots will be used.\nfunc New(rootDefs []*core.Root) (*TrustStore, error) {\n\tvar err error\n\n\tvar store = \u0026#x26;TrustStore{}\n\tvar roots []*x509.Certificate\n\n    ...\n    \n\terr = errors.New(\"transport: no supported root providers found\")\n\tfor _, root := range rootDefs {\n\t\tpfn, ok := Providers[root.Type]\n\t\tif ok {\n\t\t\troots, err = pfn(root.Metadata)\n\t\t\tif err != nil {\n\t\t\t\tbreak\n\t\t\t}\n\n\t\t\tstore.addCerts(roots)\n\t\t}\n\t}\n\t...\n\treturn store, err\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e当我们添加一个 CA 证书来源时，程序会调用 \u003ccode\u003eProviders[root.Type]()\u003c/code\u003e 获取 CA 证书。\u003c/p\u003e\n\u003cp\u003e支持的 CA 证书来源有：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// Providers is a mapping of supported providers and the functions\n// that can build them.\nvar Providers = map[string]func(map[string]string) ([]*x509.Certificate, error){\n\t\"system\": NewSystem,\n\t\"cfssl\":  NewCFSSL,\n\t\"file\":   TrustPEM,\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e其中 \u003cem\u003ecfssl\u003c/em\u003e 源获取 CA 证书方法如下：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// transport/roots/cfssl.go\n\n// NewCFSSL produces a new CFSSL root.\nfunc NewCFSSL(metadata map[string]string) ([]*x509.Certificate, error) {\n\thost, ok := metadata[\"host\"]\n\tif !ok {\n\t\treturn nil, errors.New(\"transport: CFSSL root provider requires a host\")\n\t}\n\n\tlabel := metadata[\"label\"]\n\tprofile := metadata[\"profile\"]\n    // 这里获取不到证书会返回 nil，不会报错\n\tcert, err := helpers.LoadClientCertificate(metadata[\"mutual-tls-cert\"], metadata[\"mutual-tls-key\"])\n\tif err != nil {\n\t\treturn nil, err\n\t}\n    // 这里获取不到证书会返回 nil，不会报错\n\tremoteCAs, err := helpers.LoadPEMCertPool(metadata[\"tls-remote-ca\"])\n\tif err != nil {\n\t\treturn nil, err\n\t}\n    // 创建 http/https 客户端\n\tsrv := client.NewServerTLS(host, helpers.CreateTLSConfig(remoteCAs, cert))\n\tdata, err := json.Marshal(info.Req{Label: label, Profile: profile})\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n    // 调用 \"info\" API 接口\n\tresp, err := srv.Info(data)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\treturn helpers.ParseCertificatesPEM([]byte(resp.Certificate))\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e客户端会调用 2.2.4.1 节的接口。\u003c/p\u003e\n\u003ch4\u003e2.3.3. CA Provider\u003c/h4\u003e\n\u003cp\u003e又名 Cert Provider。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// A CertificateAuthority is capable of signing certificates given\n// certificate signing requests.\ntype CertificateAuthority interface {\n\t// SignCSR submits a PKCS #10 certificate signing request to a\n\t// CA for signing.\n\tSignCSR(csrPEM []byte) (cert []byte, err error)\n\n\t// CACertificate returns the certificate authority's\n\t// certificate.\n\tCACertificate() (cert []byte, err error)\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e用于与 CA 进行通信。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// transport/ca/cfssl_provider.go\n\n// SignCSR requests a certificate from a CFSSL signer.\nfunc (cap *CFSSL) SignCSR(csrPEM []byte) (cert []byte, err error) {\n\tp, _ := pem.Decode(csrPEM)\n\tif p == nil || p.Type != \"CERTIFICATE REQUEST\" {\n\t\treturn nil, errors.New(\"transport: invalid PEM-encoded certificate signing request\")\n\t}\n\n\tcsr, err := x509.ParseCertificateRequest(p.Bytes)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\t// 原来这个地方不支持 SAN URI\n\thosts := make([]string, len(csr.DNSNames), len(csr.DNSNames)+len(csr.IPAddresses)+len(csr.URIs))\n\tcopy(hosts, csr.DNSNames)\n\n\tfor i := range csr.IPAddresses {\n\t\thosts = append(hosts, csr.IPAddresses[i].String())\n\t}\n\n\tfor i := range csr.URIs {\n\t\thosts = append(hosts, csr.URIs[i].String())\n\t}\n\n\tsreq := \u0026#x26;signer.SignRequest{\n\t\tHosts:   hosts,\n\t\tRequest: string(csrPEM),\n\t\tProfile: cap.Profile,\n\t\tLabel:   cap.Label,\n\t}\n\n\tout, err := json.Marshal(sreq)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\tif cap.provider != nil {\n\t\treturn cap.remote.AuthSign(out, nil, cap.provider)\n\t}\n\n\treturn cap.remote.Sign(out)\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e向 CA 中心发送 CSR 请求。\u003c/p\u003e\n\u003ch4\u003e2.3.4. Key Provider\u003c/h4\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// transport/kp/key_provider.go\n\n// A KeyProvider provides some mechanism for managing private keys and\n// certificates. It is not required to store the crypto.Signer itself.\ntype KeyProvider interface {\n   // Certificate returns the associated certificate, or nil if\n   // one isn't ready.\n   Certificate() *x509.Certificate\n\n   // Given some metadata about a certificate request, the\n   // provider should be able to generate a new CSR.\n   CertificateRequest(*csr.CertificateRequest) ([]byte, error)\n\n   // Check returns an error if the provider has an invalid setup.\n   Check() error\n\n   // Generate should trigger the creation of a new private\n   // key. This will invalidate any certificates stored in the\n   // key provider.\n   Generate(algo string, size int) error\n\n   // Load causes a private key and certificate associated with\n   // this provider to be loaded into memory and be prepared for\n   // use.\n   Load() error\n\n   // Persistent returns true if the provider keeps state on disk.\n   Persistent() bool\n\n   // Ready returns true if the provider has a key and\n   // certificate.\n   Ready() bool\n\n   // SetCertificatePEM takes a PEM-encoded certificate and\n   // associates it with this key provider.\n   SetCertificatePEM([]byte) error\n\n   // SignalFailure is used to notify the KeyProvider that an\n   // error has occurred obtaining a certificate. If this returns\n   // true, the caller should re-attempt to refresh the\n   // keys. This, for example, can be used to implement failover\n   // key providers that require different keys.\n   SignalFailure(err error) bool\n\n   // SignCSR allows a templated CSR to be signed.\n   SignCSR(csr *x509.CertificateRequest) ([]byte, error)\n\n   // Store should perform whatever actions are necessary such\n   // that a call to Load later will reload the key and\n   // certificate associated with this provider.\n   Store() error\n\n   // X509KeyPair returns a tls.Certficate. The returns\n   // tls.Certificate should have a parsed Leaf certificate.\n   X509KeyPair() (tls.Certificate, error)\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e可以看到 Key Provider 是给 Workload 以生成私钥、CSR、请求证书、持久化的能力。\u003c/p\u003e\n\u003cp\u003e我们对该 package 进行了改造，在上层（Capitalizone）进行了重写，以配合 SPIFFE ID 共同工作。\u003c/p\u003e\n\u003ch4\u003e2.3.5. 生命周期\u003c/h4\u003e\n\u003cp\u003e\u003ccode\u003ecfssl/transport\u003c/code\u003e 包提供了 mTLS 连接的封装，包括证书轮转功能。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// transport/client.go\n\n// A Transport is capable of providing transport-layer security using\n// TLS.\ntype Transport struct {\n\t// Before defines how long before the certificate expires the\n\t// transport should start attempting to refresh the\n\t// certificate. For example, if this is 24h, then 24 hours\n\t// before the certificate expires the Transport will start\n\t// attempting to replace it.\n\tBefore time.Duration\n\n\t// Provider contains a key management provider.\n\tProvider kp.KeyProvider\n\n\t// CA contains a mechanism for obtaining signed certificates.\n\tCA ca.CertificateAuthority\n\n\t// TrustStore contains the certificates trusted by this\n\t// transport.\n\tTrustStore *roots.TrustStore\n\n\t// ClientTrustStore contains the certificate authorities to\n\t// use in verifying client authentication certificates.\n\tClientTrustStore *roots.TrustStore\n\n\t// Identity contains information about the entity that will be\n\t// used to construct certificates.\n\tIdentity *core.Identity\n\n\t// Backoff is used to control the behaviour of a Transport\n\t// when it is attempting to automatically update a certificate\n\t// as part of AutoUpdate.\n\tBackoff *backoff.Backoff\n\n\t// RevokeSoftFail, if true, will cause a failure to check\n\t// revocation (such that the revocation status of a\n\t// certificate cannot be checked) to not be treated as an\n\t// error.\n\tRevokeSoftFail bool\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e这里同时将描述 mTLS 通信的整个流程。\u003c/p\u003e\n\u003ch5\u003e2.3.5.1. 获取证书\u003c/h5\u003e\n\u003cblockquote\u003e\n\u003cp\u003eIn a TLS handshake, the certificate presented by a remote server is sent alongside the \u003ccode\u003eServerHello\u003c/code\u003e message. At this point in the connection, the remote server has received the \u003ccode\u003eClientHello\u003c/code\u003e message, and that is all the information it needs to decide which certificate to present to the connecting client.\u003c/p\u003e\n\u003c/blockquote\u003e\n\u0026#x3C;img src=\"https://diogomonica.com/content/images/2017/01/begining-tls-handshake-1.png\" width=\"400\" /\u003e\n\u003cp\u003eServerHello 阶段会传输证书，这里涉及到一个问题：如何热更新证书。\u003c/p\u003e\n\u003cblockquote\u003e\n\u003cp\u003eIt turns out that Go supports passing a callback in a TLS Config that will get executed every time a TLS \u003ccode\u003eClientHello\u003c/code\u003e is sent by a remote peer. This method is conveniently called \u003ccode\u003eGetCertificate\u003c/code\u003e, and it returns the certificate we wish to use for that particular TLS handshake.\u003c/p\u003e\n\u003cp\u003eThe idea of \u003ccode\u003eGetCertificate\u003c/code\u003e is to allow the dynamic  selection of which certificate to provide to a particular remote peer.  This method can be used to support virtual hosts, where one web server  is responsible for multiple domains, and therefore has to choose the  appropriate certificate to return to each remote peer.\u003c/p\u003e\n\u003c/blockquote\u003e\n\u003cp\u003eGolang 的 tls 包提供了获取证书的函数支持：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e    // GetCertificate returns a Certificate based on the given\n    // ClientHelloInfo. It will only be called if the client supplies SNI\n    // information or if Certificates is empty.\n    //\n    // If GetCertificate is nil or returns nil, then the certificate is\n    // retrieved from NameToCertificate. If NameToCertificate is nil, the\n    // best element of Certificates will be used.\n    GetCertificate func(*ClientHelloInfo) (*Certificate, error) // Go 1.4\n\n    // GetClientCertificate, if not nil, is called when a server requests a\n    // certificate from a client. If set, the contents of Certificates will\n    // be ignored.\n    //\n    // If GetClientCertificate returns an error, the handshake will be\n    // aborted and that error will be returned. Otherwise\n    // GetClientCertificate must return a non-nil Certificate. If\n    // Certificate.Certificate is empty then no certificate will be sent to\n    // the server. If this is unacceptable to the server then it may abort\n    // the handshake.\n    //\n    // GetClientCertificate may be called multiple times for the same\n    // connection if renegotiation occurs or if TLS 1.3 is in use.\n    GetClientCertificate func(*CertificateRequestInfo) (*Certificate, error) // Go 1.8\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e每次 TLS 握手时，\u003ccode\u003eGetCertificate\u003c/code\u003e / \u003ccode\u003eGetClientCertificate\u003c/code\u003e 方法会被调用，我们能够实现这个方法，动态更新证书。\u003c/p\u003e\n\u003cp\u003e\u003ca href=\"https://diogomonica.com/2017/01/11/hitless-tls-certificate-rotation-in-go/\"\u003e示例代码\u003c/a\u003e：\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003etype wrappedCertificate struct {\n\tsync.Mutex\n\tcertificate *tls.Certificate\n}\n\nfunc (c *wrappedCertificate) getCertificate(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {\n\tc.Lock()\n\tdefer c.Unlock()\n\n\treturn c.certificate, nil\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u0026#x3C;img src=\"https://diogomonica.com/content/images/2017/01/golang-new-certificate-being-served.png\" height=\"400\" /\u003e\n\u003cblockquote\u003e\n\u003cp\u003eOld established connections using the previous certificate will remain  active, but new connections coming in to our TLS server will use the  most recent certificate.\u003c/p\u003e\n\u003c/blockquote\u003e\n\u003ch5\u003e2.3.5.2. 证书轮转\u003c/h5\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// transport/client.go\n\n// AutoUpdate will automatically update the listener. If a non-nil\n// certUpdates chan is provided, it will receive timestamps for\n// reissued certificates. If errChan is non-nil, any errors that occur\n// in the updater will be passed along.\nfunc (tr *Transport) AutoUpdate(certUpdates chan\u0026#x3C;- time.Time, errChan chan\u0026#x3C;- error) {\n\tdefer func() {\n\t\tif r := recover(); r != nil {\n\t\t\tlog.Criticalf(\"AutoUpdate panicked: %v\", r)\n\t\t}\n\t}()\n\n\tfor {\n\t\t// Wait until it's time to update the certificate.\n\t\ttarget := time.Now().Add(tr.Lifespan())\n\t\tif PollInterval == 0 {\n\t\t\t\u0026#x3C;-time.After(tr.Lifespan())\n\t\t} else {\n\t\t\tpollWait(target)\n\t\t}\n\n\t\t// Keep trying to update the certificate until it's\n\t\t// ready.\n\t\tfor {\n\t\t\tlog.Debugf(\"attempting to refresh keypair\")\n\t\t\terr := tr.RefreshKeys()\n\t\t\tif err == nil {\n\t\t\t\tbreak\n\t\t\t}\n\n\t\t\tdelay := tr.Backoff.Duration()\n\t\t\tlog.Debugf(\"failed to update certificate, will try again in %s\", delay)\n\t\t\tif errChan != nil {\n\t\t\t\terrChan \u0026#x3C;- err\n\t\t\t}\n\n\t\t\t\u0026#x3C;-time.After(delay)\n\t\t}\n\n\t\tlog.Debugf(\"certificate updated\")\n\t\tif certUpdates != nil {\n\t\t\tcertUpdates \u0026#x3C;- time.Now()\n\t\t}\n\n\t\ttr.Backoff.Reset()\n\t}\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e该方法会保持一个协程运行，检查证书有效时间，定时更新证书。\u003c/p\u003e\n\u003ch5\u003e2.3.5.3. CA 证书认证\u003c/h5\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e// transport/client.go\n\n// TLSClientAuthClientConfig returns a new client authentication TLS\n// configuration that can be used for a client using client auth\n// connecting to the named host.\nfunc (tr *Transport) TLSClientAuthClientConfig(host string) (*tls.Config, error) {\n\tcert, err := tr.getCertificate()\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\treturn \u0026#x26;tls.Config{\n\t\tCertificates: []tls.Certificate{cert},\n\t\tRootCAs:      tr.TrustStore.Pool(),\n\t\tServerName:   host,\n\t\tCipherSuites: core.CipherSuites,\n\t\tMinVersion:   tls.VersionTLS12,\n\t\tClientAuth:   tls.RequireAndVerifyClientCert,\n\t}, nil\n}\n\n// TLSClientAuthServerConfig returns a new client authentication TLS\n// configuration for servers expecting mutually authenticated\n// clients. The clientAuth parameter should contain the root pool used\n// to authenticate clients.\nfunc (tr *Transport) TLSClientAuthServerConfig() (*tls.Config, error) {\n\tlogger.DEBUG.Print(\"------------------------ 获取服务器证书\")\n\tcert, err := tr.getCertificate()\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\tlogger.DEBUG.Print(\"------------------------ OK 服务器证书\")\n\treturn \u0026#x26;tls.Config{\n\t\tCertificates: []tls.Certificate{cert},\n\t\tRootCAs:      tr.TrustStore.Pool(),\n\t\tClientCAs:    tr.ClientTrustStore.Pool(),\n\t\tClientAuth:   tls.RequireAndVerifyClientCert,\n\t\tCipherSuites: core.CipherSuites,\n\t\tMinVersion:   tls.VersionTLS12,\n\t}, nil\n}\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003eServer 端和 Client 端的区别在于：\u003c/p\u003e\n\u003col\u003e\n\u003cli\u003eServer 端 \u003ccode\u003etls.Config\u003c/code\u003e 需要 \u003ccode\u003eClientCAs\u003c/code\u003e 参数\u003c/li\u003e\n\u003cli\u003eClient 端需要 \u003ccode\u003eServerName\u003c/code\u003e 参数\u003c/li\u003e\n\u003c/ol\u003e\n\u003cp\u003eServer 端的  \u003ccode\u003eClientCAs\u003c/code\u003e 和 Client 端的 \u003ccode\u003eRootCAs\u003c/code\u003e 需要包含 Root CA 和 ICA 证书。\u003c/p\u003e\n\u003ch5\u003e2.3.5.4. 证书验证\u003c/h5\u003e\n\u003cp\u003e除了一般的证书校验以外，Istio 还通过自定义校验方法，进行了 SPIFFE ID 的验证。\u003c/p\u003e\n\u003cpre\u003e\u003ccode class=\"language-go\"\u003e    // VerifyPeerCertificate, if not nil, is called after normal\n    // certificate verification by either a TLS client or server. It\n    // receives the raw ASN.1 certificates provided by the peer and also\n    // any verified chains that normal processing found. If it returns a\n    // non-nil error, the handshake is aborted and that error results.\n    //\n    // If normal verification fails then the handshake will abort before\n    // considering this callback. If normal verification is disabled by\n    // setting InsecureSkipVerify, or (for a server) when ClientAuth is\n    // RequestClientCert or RequireAnyClientCert, then this callback will\n    // be considered but the verifiedChains argument will always be nil.\n    VerifyPeerCertificate func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error // Go 1.8\n\n    // VerifyConnection, if not nil, is called after normal certificate\n    // verification and after VerifyPeerCertificate by either a TLS client\n    // or server. If it returns a non-nil error, the handshake is aborted\n    // and that error results.\n    //\n    // If normal verification fails then the handshake will abort before\n    // considering this callback. This callback will run for all connections\n    // regardless of InsecureSkipVerify or ClientAuth settings.\n    VerifyConnection func(ConnectionState) error // Go 1.15\n\u003c/code\u003e\u003c/pre\u003e\n\u003cp\u003e\u003ccode\u003eVerifyPeerCertificate\u003c/code\u003e 里能够提供 SPIFFE 的认证，\u003ccode\u003eVerifyConnection\u003c/code\u003e 能够通过 SDK 提供自定义认证。\u003c/p\u003e"])</script><script>self.__next_f.push([1,"4:[\"$\",\"article\",null,{\"dangerouslySetInnerHTML\":{\"__html\":\"$c\"}}]\n"])</script></body></html>
