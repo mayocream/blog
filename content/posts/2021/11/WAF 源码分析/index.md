@@ -35,7 +35,7 @@ draft: true
 - 中 - 40 及以上
 - 高 - 25 及以上
 
-![img](images/https%3A%2F%2Fs3-us-west-2.amazonaws.com%2Fsecure.notion-static.com%2F6db60e1d-1a01-4fa6-95d0-f977c72acd90%2FUntitled.png)
+![img](/images/2021-11-01-05.png)
 
 #### 1.1.2. 平台托管规则集
 
@@ -56,7 +56,7 @@ draft: true
 
 使用通用的 WAF 设置语法，平台提供统一的界面可视化操作。
 
-![img](images/https%3A%2F%2Fs3-us-west-2.amazonaws.com%2Fsecure.notion-static.com%2F28dde025-7113-42f0-ac31-0bced664f089%2FUntitled.png)
+![img](/images/2021-11-01-04.png)
 
 ### 1.2. 规则编写
 
@@ -118,7 +118,7 @@ draft: true
 
 #### 1.2.2. 规则处理概述
 
-![规则解析](images/https%3A%2F%2Fs3-us-west-2.amazonaws.com%2Fsecure.notion-static.com%2F14fa86e6-413f-45b4-9b5a-cb9e5000a44d%2FUntitled.png)
+![规则解析](/images/2021-11-01-03.png)
 
 ### 1.3. 规则编排
 
@@ -304,7 +304,7 @@ end
 
 示意图：
 
-![image-20210813182139716](images/image-20210813182139716.png)
+![image-20210813182139716](/images/2021-11-01-06.png)
 
 
 

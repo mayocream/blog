@@ -18,17 +18,17 @@ typeface: sans
 
 既然 APISIX 是基于 OpenResty 开发的 API 网关，APISIX 与 OpenResty 的请求生命周期一致，APISIX 利用 Lua Nginx Module 提供的 `*_by_lua` 添加 Hook。
 
-![API Gateway traffic](images/gateway-traffic.png)
+![API Gateway traffic](/images/2021-09-01-04.png)
 
 它抽象了与 Kong 网关同样的数据模型，具有同样的 Route、Service、Upstream、Plugin、Consumer 等资源。
 
 <div style="display: flex">
 	<figure style="max-width: 50%">
-        <img  src="images/114740649-a9bf2200-9d67-11eb-8e1d-1409fb5c18c2.png">
+        <img src="/images/2021-09-01-01.png" />
         <figcaption style="text-align: center">APISIX</figcaption>
 	</figure>
 	<figure style="max-width: 50%">
-        <img  src="images/Kong-GS-overview.png">
+        <img src="/images/2021-09-01-02.png" />
         <figcaption style="text-align: center">Kong</figcaption>
 	</figure>
 </div>
@@ -1734,23 +1734,23 @@ end
 
 Cloudflare 的边缘计算是基于 Edge Gateway（边缘网关、边缘集群）的 Serverless 代码执行，提供了 JS 代码执行，以及 WASM 二进制。[^10]
 
-![](images/image-20210611155454963.png)
+![](/images/2021-09-01-05.png)
 
 
 
 *一些相关的 Issue:*
 
 - [Support wasm in openresty?](https://github.com/openresty/openresty/issues/541)
-  ![](images/image-20210611160051987.png)
+  ![](/images/2021-09-01-06.png)
 
 - [feature: support WebAssembly in apisix.](https://github.com/apache/apisix/issues/157)
-  ![](images/image-20210611160137790.png)
+  ![](/images/2021-09-01-08.png)
 
 #### 3.1.1. Lua (Serverless)
 
 APISIX 的 Serverless 插件功能支持注入任何 Lua 脚本，Kong 也支持对应的功能，APISIX 就是抄的 Kong 的插件功能。[^11]
 
-![](images/image-20210611160354452.png)
+![](/images/2021-09-01-09.png)
 
 只支持最简单的函数执行。
 
@@ -1863,7 +1863,7 @@ APISIX 网关的 Mesh 项目。值得一提的是 Kong 也有类似的 Mesh 项�
 
 Repo: [api7/apisix-mesh-agent](https://github.com/api7/apisix-mesh-agent)
 
-![](images/apisix-mesh-overview.png)
+![](/images/2021-09-01-03.png)
 
 Go 语言开发的 Agent，接入了 Istio 的协议：
 

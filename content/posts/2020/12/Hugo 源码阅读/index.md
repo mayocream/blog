@@ -126,7 +126,7 @@ type cmder interface {
 }
 ```
 
-![](images/hugo-impl.png)
+![](/images/2020-12-01-02.png)
 
 ```go
 // commands/commands.go
@@ -613,7 +613,7 @@ func (q *EvictingStringQueue) PeekAllSet() map[string]bool {
 
 #### 3.4.1. CLI 自动补全
 
-![](images/hugo-cli.png)
+![](/images/2020-12-01-01.png)
 
 Hugo 的使用方式有两种：
 

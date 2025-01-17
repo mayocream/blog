@@ -32,7 +32,7 @@ SPIFFE 规范的实现有 spiffe 官方的 [Spire](https://github.com/spiffe/spi
 
 Istio 使用形如 `spiffe://<trust_domain>/ns/<namespace>/sa/<service_account>` 格式的 SPIFFE ID 作为安全命名，注入到 X.509 证书的 subjectAltName 扩展中。其中“trust domain”参数通过 Istiod 环境变量 `TRUST_DOMAIN` 注入，用于在多集群环境中交互。
 
-![Istio 安全架构](images/istio-security-arch-sec.svg)
+![Istio 安全架构](/images/2021-10-01-06.svg)
 
 ### 1.2. 代码实现
 
@@ -1698,7 +1698,7 @@ func (sc *SecretCache) addFileWatcher(file string, token string, connKey ConnKey
 
 附 Istio 证书体系相关流程图[^8]：
 
-![](images/cert-flow.png)
+![](/images/2021-10-01-05.png)
 
 [^1]: 摘自《零信任网络 : 在不可信网络中构建安全系统》第 6 章—建立用户信任
 [^2]: [Istio / Security - Secure naming](https://istio.io/latest/docs/concepts/security/#secure-naming)

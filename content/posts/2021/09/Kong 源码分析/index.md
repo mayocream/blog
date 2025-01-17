@@ -25,13 +25,13 @@ typeface: sans
 
 **Kong（OpenResty）的执行阶段**：
 
-![](images/openresty_phases.png)
+![](/images/2021-09-01-20.png)
 
 Kong 的插件机制也是基于 OpenResty 的生命周期，只不过是其在上层做了些许封装。
 
 **Kong 的数据库关联关系**：
 
-![](images/kong_db.png)
+![](/images/2021-09-01-19.png)
 
 Kong 虽然标称自己是 Cloud Native 项目[^kong]，也上榜了 CNCF [全景图](https://landscape.cncf.io/)，但是它还依赖于传统的数据库 PostgreSQL，并且还自定义了许多 function，相比于 APISIX 背后储存 Etcd 要弱了许多。比起 Etcd 能建立 HTTP 长连接 Watch 数据变化，Kong 只能依赖定时的轮询从数据库更新状态，数据库高可用也相比 Etcd 集群要复杂得多。
 

@@ -1,6 +1,0 @@
-[submodule "themes/axiom"]
-	path = themes/axiom
-	url = https://github.com/mayocream/axiom.git
-[submodule "themes/kagami"]
-	path = themes/kagami
-	url = https://github.com/mayocream/hugo-theme-kagami.git

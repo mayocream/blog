@@ -14,7 +14,7 @@ CDN（Content  Delivery  Network）内容分发网络，是构建在基础 IP �
 
 CDN 依靠部署在各地的边缘服务器（Edge Network），通过中心平台的负载均衡、内容分发、调度等功能模块，将内容发布到最接近用户的网络“边缘”，使用户就近获取所需内容，降低网络拥塞，提高用户访问网站的响应速度。 [^1]
 
-![图：CDN 边缘节点就近分发内容。](images/GSLB-Traffic-Diagram-1024x421.png)
+![图：CDN 边缘节点就近分发内容。](/images/2021-09-01-26.png)
 
 ### 1.2. 核心技术
 
@@ -24,7 +24,7 @@ CDN 改进了传统网络架构，广泛利用缓存技术，将各种缓存服�
 
 Anycast（或称 IP Anycast），是一种允许多台机器共享同一个 IP 地址的网络技术。 根据用户请求的位置，路由器将其发送到网络中**距离最近**的机器。它可以**降低延迟**、**增加冗余**。如果某个数据中心下线，则 Anycast IP 会为用户选择最佳路径，并自动将他们重定向到下一个最近的数据中心。[^2]
 
-![图：Anycast 技术发现最短路径。](images/anycast.png)
+![图：Anycast 技术发现最短路径。](/images/2021-09-01-29.png)
 
 #### 1.2.2. 内容分发
 
@@ -68,7 +68,7 @@ AWS 的 [Global Accelerator](https://docs.aws.amazon.com/global-accelerator/late
 
 静态资源排名第一名的 Google Hosted Libraries 应该是 Google 静态资源例如 `fonts.google.com`，排名第五的 jsDelivr 是由 Cloudflare、Fastly 以及国内 CDN 厂商支持的开源静态资源 CDN。
 
-![图：Datanyze 统计的静态资源 CDN 使用排名。](images/image-20210924162429131.png)
+![图：Datanyze 统计的静态资源 CDN 使用排名。](/images/2021-09-01-34.png)
 
 Cloudflare 提供免费的 CDN，包含静态资源与动态资源加速，以及免费的 SSL 证书。
 
@@ -82,24 +82,24 @@ Cloudflare 提供免费的 CDN，包含静态资源与动态资源加速，以�
 
 按客户数量计算的 Top CDN 提供商是 Cloudflare、Amazon Web Services (AWS)、Akamai、NetDNA、Fastly、Imperva、Verizon 和 Microsoft Azure。 [^8]
 
-![图：2020 年 CDN 厂商客户数对比。](images/5f0609c6e8dd721e170de169_Customer.png)
+![图：2020 年 CDN 厂商客户数对比。](/images/2021-09-01-21.png)
 
 
 从表面上看，Cloudflare 似乎是其客户数量最大的 CDN。 Cloudflare 为超过 100 万客户提供 CDN 服务。 尽管它拥有庞大的客户群，但这个价值并不能说明全部。
 
 Cloudflare 拥有不到 10,000 个中端市场和企业客户； 其大多数客户是中端市场和中小型企业。它的许多客户使用 Cloudflare 的服务来加速网站，同时也提高安全性。
 
-![图：2020 年 CDN 厂商大企业、中小企业客户数对比。](images/5f0609f1bfec1a5d44872017_Customer.png)
+![图：2020 年 CDN 厂商大企业、中小企业客户数对比。](/images/2021-09-01-22.png)
 
 #### 2.1.3. 市场分析
 
 使用反向代理是网站的一个大趋势。在过去一年，使用反向代理的网站占全部网站的比例从 17.1% 增长到 21.6%。这个市场最大的提供商是 Cloudflare，市场份额占比约为 80%。另外两个提供商是 Fastly 和 AWS 的CloudFront。Cloudflare 的增长速度比这两家要低，所以市场份额跟一年前比有轻微缩小。但是整个反向代理市场在增大，CDN 行业都在高速增长。[^9]
 
-![图：使用反向代理的网站占比（2020年 9月~2021年 9月）。](images/image-20210924171459378.png)
+![图：使用反向代理的网站占比（2020年 9月~2021年 9月）。](/images/2021-09-01-35.png)
 
-![图：使用反向代理的网站占比（2020年 9月~2021年 9月）。](images/m.png)
+![图：使用反向代理的网站占比（2020年 9月~2021年 9月）。](/images/2021-09-01-40.png)
 
-![图：网站使用的反向代理提供商占比（2021年 9月）。](images/Share.svg)
+![图：网站使用的反向代理提供商占比（2021年 9月）。](/images/2021-09-01-28.svg)
 
 根据 [w3techs](https://w3techs.com/technologies/history_overview/proxy/all) 2021 年 9 月的 CDN 厂商市场份额占比数据显示，Cloudflare 遥遥领先。
 
@@ -107,13 +107,13 @@ Cloudflare 拥有不到 10,000 个中端市场和企业客户； 其大多数客
 
 CDNPerf 提供的 2021 年 9 月 [CDN 性能对比排名 Top 10](https://www.cdnperf.com/)（仅供参考）：
 
-![](images/image-20210923135054873.png)
+![](/images/2021-09-01-32.png)
 
 CDN 性能取决于 PoP 接入点（Point of Presence）、ISP 网络质量（QoS）、高低峰、文件类型（静态/动态）、文件压缩技术（Gzip/Brotli）、HTTP 协议（HTTP/1.1, HTTP/2.0, HTTP/3）、Cache 机制（是否回源）、网络带宽等因素，不能一概而论。
 
 #### 2.2.1. PoP 接入点
 
-![图：CDN PoP 接入点数量对比。](images/CDN_PoPs.svg)
+![图：CDN PoP 接入点数量对比。](/images/2021-09-01-25.svg)
 
 注：Akamai 没有公开 PoP 节点。
 
@@ -121,15 +121,15 @@ CDN 性能取决于 PoP 接入点（Point of Presence）、ISP 网络质量（Qo
 
 RUM（Real User Monitoring）[Uptime 在线时间排名 Top 10](https://www.cdnperf.com/#!rum)：
 
-![](images/image-20210923135156192.png)
+![](/images/2021-09-01-33.png)
 
 ### 2.4. 安全性
 
-![图：2021 Q1 DDoS 缓解方案对比报告。](images/image-20210926161556278.png)
+![图：2021 Q1 DDoS 缓解方案对比报告。](/images/2021-09-01-37.png)
 
 
 
-![图：2021 Q1 CDN 厂商 DDoS 缓解方案得分表报告。](images/image-20210926162016484.png)
+![图：2021 Q1 CDN 厂商 DDoS 缓解方案得分表报告。](/images/2021-09-01-38.png)
 
 
 Cloudflare 的 DDoS 缓解方案得分高于 Akamai、亚马逊网络服务、谷歌和微软。 [^10]
@@ -142,14 +142,14 @@ Cloudflare 的 DDoS 缓解方案得分高于 Akamai、亚马逊网络服务、�
 
 ### 2.5. 功能
 
-![图：CDN 功能对比。](images/7a1a6570-a12f-44ab-91e4-2b5c4ba89ef7.png)
+![图：CDN 功能对比。](/images/2021-09-01-23.png)
 
 
 注：部分数据来自于 [Best CDN Comparison](https://cdncomparison.com/)。
 
 ### 2.6. 价格
 
-![图：带宽成本（50% 北美流量、50% 亚洲流量）对比。](images/Bandwith.svg)
+![图：带宽成本（50% 北美流量、50% 亚洲流量）对比。](/images/2021-09-01-24.svg)
 
 
 注：价格成本计算数据来自 [CDNPerf Calculator](https://www.cdnperf.com/tools/cdn-calculator)。

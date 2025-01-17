@@ -83,11 +83,11 @@ tar zxvf /tmp/krustlet.tar.gz && mv krustlet-wasi /usr/local/bin/
 
 #### 1.1.4. 节点状态
 
-![等待手动 Approve](images/Untitled.png)
+![等待手动 Approve](/images/2021-09-01-18.png)
 
-![程序正常启动](images/1.png)
+![程序正常启动](/images/2021-09-01-14.png)
 
-![Krustlet 节点已加入集群](images/2.png)
+![Krustlet 节点已加入集群](/images/2021-09-01-15.png)
 
 - Krustlet 节点详情 `kubectl describe node ${HOSTNAME}`
 
@@ -426,7 +426,7 @@ kubectl 查看与运行日志。
 
 > 注：这个项目更多是概念验证，进程管理、资源限制，性能优化等的细节并没未完整实现。
 
-![](images/3.png)
+![](/images/2021-09-01-16.png)
 
 “container-shim-wasm-v1” 作为 Containerd 的插件，利用 wasmer 作为 WASM 应用运行时环境，同时将其注册为 K8s 的一个 RuntimeClass ，利用 K8s 调度 WASM。
 
@@ -461,7 +461,7 @@ Containerd 的配置中配置 wasm Runtime：
 
 > 参考文章：[理解 RuntimeClass 与使用多容器运行时](https://www.kubernetes.org.cn/7185.html)
 
-![](images/4.png)
+![](/images/2021-09-01-17.png)
 
 Containerd 的 Runtime 会对应到 K8s 的 RuntimeClass。
 

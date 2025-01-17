@@ -11,10 +11,10 @@ I wanna share my own experience and might provide tips or tricks to help someone
 
 <div style="display: flex">
 	<figure style="max-width: 50%">
-        <img src="images/cka.jpg">
+        <img src="/images/2021-10-01-01.jpg" />
 	</figure>
 	<figure style="max-width: 50%">
-        <img src="images/ckad.jpg">
+        <img src="/images/2021-10-01-02.jpg" />
 	</figure>
 </div>
 
@@ -66,7 +66,7 @@ Notice that these exams only include skills that meet the minimum requirements f
 It's quite invaluable buying CKA/CKAD exam without discounts, it will cost you \$375 for just one exam.
 I purchased CKA and CKAD exam bundle only for $349 in the Black Friday sale.
 
-![](images/purchase-history.png)
+![](/images/2021-10-01-03.png)
 
 I'm not sure if it's worth taking these exams, but there' no better choice otherwise you wanna take AWS certification or other stuff.
 It's much easier than CNAA (Cisco Certified Network Associate).
@@ -82,7 +82,7 @@ I end up hiding my books on the bookshelf covered by a curtain (Ahh).
 
 The Invigilator will "talk" to you in the Chat window, they just sending you message texts and expecting your replies.
 
-![Exam User Interface](images/ui.png)
+![Exam User Interface](/images/2021-10-01-04.png)
 
 Learn more about [Exam User Interface](https://docs.linuxfoundation.org/tc-docs/certification/lf-candidate-handbook/exam-user-interface).
 

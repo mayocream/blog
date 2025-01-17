@@ -5,7 +5,7 @@ typeface: sans
 toc: true
 ---
 
-![](images/flow.png)
+![](/images/2021-11-01-01.png)
 
 该程序启动后有以下主要步骤：
 
@@ -877,7 +877,7 @@ func (n *KongController) onUpdateDBMode(targetContent *file.Content) error {
 
 `ingress-nginx` 提供了 SSL Passthrough 功能，使得加密流量直接通过 443 端口传到后端服务器，这里引用一篇文章清晰明了的解释。
 
-![img{512x368}](images/kubernetes-ingress-controller-and-ingresses-https.png)
+![img{512x368}](/images/2021-11-01-02.png)
 
 > svc7: 是对传统通信模型的“复现”，即 Client 与 Nginx 间采用 HTTPS 加密通信，但 Nginx 与 svc7 间则是明文的 HTTP 通信；
 >

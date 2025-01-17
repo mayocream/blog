@@ -1239,7 +1239,7 @@ func (d *Accessor) GetOCSP(serial, aki string) (ors []certdb.OCSPRecord, err err
 
 OCSP 签名和返回是分开的，并且不会在创建证书一并创建。
 
-![](images/image-20201223183804763.png)场景1：OCSP 签名会在证书被吊销时创建。
+![](/images/2021-11-01-07.png)场景1：OCSP 签名会在证书被吊销时创建。
 
 ```go
 // cli/ocsprefresh/ocsprefresh.go

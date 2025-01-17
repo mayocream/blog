@@ -613,7 +613,7 @@ Chaos Mesh 是一个开源的混沌工程系统，以 Apache 2.0 协议开源，
 
 ### 要做什么？
 
-![Chaos Mesh 的基本工作流原理图](images/4_d0e6bfad2a.png)
+![Chaos Mesh 的基本工作流原理图](/images/2021-10-01-07.png)
 
 这里标题虽是控制平面，但查看上述 Chaos Mesh 工作流程图，其实我们需要做的只是实现一个将 YAML 下发到 Kubernetes API 的服务器，复杂的规则校验、规则下发到 Chaos Daemon 的行为是由 Chaos Controller Manager 完成的。想要结合自己的平台使用，只需要对接 CRD 资源创建的过程就足够了。
 
@@ -808,7 +808,7 @@ func ListPodChaos(namespace string, labels map[string]string) ([]v1alpha1.PodCha
 
 示例中使用了 manager，该模式下会启用 cache 机制，避免重复获取大量数据。
 
-![](images/cache.png)
+![](/images/2021-10-01-08.png)
 
 1. 获取 Pod
 2. 初次获取全量数据（List）
@@ -828,7 +828,7 @@ func ListPodChaos(namespace string, labels map[string]string) ([]v1alpha1.PodCha
 
 参考 Chaos Mesh Dashboard，我们需要考虑平台该提供哪些功能给终端用户。
 
-![](images/image-20211021030337926-16347566199512.png)
+![](/images/2021-10-01-09.png)
 
 可能的平台功能点：
 
