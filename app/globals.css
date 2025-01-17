@@ -1,3 +1,87 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Keywords */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-addition {
+  color: #c792ea;
+}
+
+/* Strings */
+.hljs-string,
+.hljs-attribute,
+.hljs-symbol {
+  color: #c3e88d;
+}
+
+/* Numbers */
+.hljs-number,
+.hljs-regexp,
+.hljs-bullet {
+  color: #f78c6c;
+}
+
+/* Function names */
+.hljs-title,
+.hljs-built_in {
+  color: #82aaff;
+}
+
+/* Type names */
+.hljs-type,
+.hljs-section {
+  color: #ffcb6b;
+}
+
+/* Variables */
+.hljs-variable,
+.hljs-template-variable {
+  color: #eeffff;
+}
+
+/* Comments */
+.hljs-comment,
+.hljs-quote,
+.hljs-deletion {
+  color: #546e7a;
+  font-style: italic;
+}
+
+/* Meta information */
+.hljs-meta {
+  color: #89ddff;
+}
+
+/* Links */
+.hljs-link {
+  color: #80cbc4;
+  text-decoration: underline;
+}
+
+/* Class names */
+.hljs-class {
+  color: #ffcb6b;
+}
+
+/* Function parameters */
+.hljs-params {
+  color: #eeffff;
+}
+
+/* JavaScript template literals */
+.hljs-template-tag {
+  color: #ff5370;
+}
+
+/* Important keywords */
+.hljs-name,
+.hljs-strong {
+  font-weight: bold;
+}
+
+/* Emphasis */
+.hljs-emphasis {
+  font-style: italic;
+}

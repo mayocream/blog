@@ -1,3 +1,4 @@
+import Article from '@/components/article'
 import { getPost, getPosts, markdownToHtml } from '@/lib/content'
 
 export async function generateStaticParams() {
@@ -32,7 +33,7 @@ export default async function Page({
           {post.frontmatter.title}
         </h2>
       </aside>
-      <article className="prose lg:prose-xl" dangerouslySetInnerHTML={{ __html: html }} />
+      <Article raw={html} />
     </>
   )
 }
