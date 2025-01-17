@@ -41,7 +41,7 @@ export async function getPosts() {
 
 export async function getPost(slug: string) {
     const posts = await getPosts()
-    return posts.find((post) => post.frontmatter.slug === slug)
+    return posts.find((post) => post.frontmatter.slug === slug || encodeURIComponent(post.frontmatter.slug) === slug)
 }
 
 export async function markdownToHtml(content: string) {
