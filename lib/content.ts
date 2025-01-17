@@ -1,5 +1,6 @@
 import matter from 'gray-matter'
 import { glob } from 'node:fs/promises'
+import rehypeRaw from 'rehype-raw'
 import rehypeStringify from 'rehype-stringify'
 import remarkGfm from 'remark-gfm'
 import remarkParse from 'remark-parse'
@@ -10,6 +11,7 @@ const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeRaw)
     .use(rehypeStringify)
 
 export async function getPosts() {
