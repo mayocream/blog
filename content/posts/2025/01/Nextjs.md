@@ -282,6 +282,8 @@ export async function markdownToHtml(content: string) {
 
 ## Sitemap フィード
 
+サイトマップを自動的に生成し、サイトの SEO を向上させることができます。
+
 ```typescript
 import { getPosts } from '@/lib/content'
 import type { MetadataRoute } from 'next'
@@ -308,6 +310,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 ```
 
 ## Note.com からのインポート
+
+Note.com からブログをインポートするために、`feedparser` と `requests` を使用します。これにより、Note.com の RSS フィードを解析し、各エントリのタイトル、URL、日付、およびコンテンツを取得できます。
 
 ```python
 import feedparser
@@ -371,6 +375,8 @@ date: "{formatted_date}"
 ```
 
 ## Highlight.js と Mermaid
+
+Markdown ファイル内のコードブロックをシンタックスハイライトするために、`highlight.js` を使用します。また、Mermaid というライブラリを使用して、フローチャートやシーケンス図を描画します。
 
 ```typescript
 'use client'
