@@ -41,7 +41,7 @@ export default async function Page({
     <>
       <aside
         style={{
-          fontVariantEastAsian: post.frontmatter.lang === 'ja' ? 'jis78' : 'simplified',
+          fontVariantEastAsian: post.frontmatter.lang === 'ja' ? 'simplified' : 'jis78',
         }}
       >
         <div className="text-sm uppercase tracking-wider text-gray-500">
