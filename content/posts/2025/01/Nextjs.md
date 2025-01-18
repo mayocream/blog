@@ -1,5 +1,5 @@
 ---
-title: "Next.js：新時代のPHPでブログを作ってみた"
+title: "Next.js: 新時代のPHPでブログを作ってみた"
 slug: next.js
 date: "2025-01-18"
 lang: ja
