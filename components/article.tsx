@@ -21,5 +21,5 @@ export default function Article({ raw }: { raw: string }) {
     })
   }, [])
 
-  return <article className="prose lg:prose-xl" dangerouslySetInnerHTML={{ __html: raw }} />
+  return <main className="prose lg:prose-xl" dangerouslySetInnerHTML={{ __html: raw }} />
 }

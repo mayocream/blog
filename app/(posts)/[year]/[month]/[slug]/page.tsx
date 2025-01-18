@@ -37,7 +37,7 @@ export default async function Page({
   const post = (await getPost(slug))!
   const html = await markdownToHtml(post.content)
   return (
-    <>
+    <article lang={post.frontmatter.lang}>
       <aside>
         <div className="text-sm uppercase tracking-wider text-gray-500">
           {new Date(post.frontmatter.date).toISOString()}
@@ -47,6 +47,6 @@ export default async function Page({
         </h2>
       </aside>
       <Article raw={html} />
-    </>
+    </article>
   )
 }
