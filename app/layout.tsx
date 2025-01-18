@@ -1,5 +1,10 @@
 import type { Metadata } from 'next'
+import { Noto_Sans_JP, Noto_Sans_SC, Noto_Sans } from 'next/font/google'
 import './globals.css'
+
+const NotoSansJP = Noto_Sans_JP({ subsets: ['latin'] })
+const NotoSansSC = Noto_Sans_SC({ subsets: ['latin'] })
+const NotoSans = Noto_Sans({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Mayo Rocks!',
@@ -12,8 +17,10 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html>
-      <body className="antialiased">{children}</body>
+    <html lang="ja">
+      <body className={`${NotoSans.className} ${NotoSansJP.className} ${NotoSansSC.className} antialiased`}>
+        {children}
+      </body>
     </html>
   )
 }
