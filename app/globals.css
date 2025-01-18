@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+* {
+  /* https://developer.chrome.com/blog/css-i18n-features?hl=ja */
+  word-break: auto-phrase;
+  text-autospace: ideograph-alpha;
+}
+
 /* Keywords */
 .hljs-keyword,
 .hljs-selector-tag,

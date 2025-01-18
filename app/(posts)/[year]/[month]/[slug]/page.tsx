@@ -36,9 +36,14 @@ export default async function Page({
   const { slug } = await params
   const post = (await getPost(slug))!
   const html = await markdownToHtml(post.content)
+
   return (
     <>
-      <aside>
+      <aside
+        style={{
+          fontVariantEastAsian: post.frontmatter.lang === 'ja' ? 'jis78' : 'simplified',
+        }}
+      >
         <div className="text-sm uppercase tracking-wider text-gray-500">
           {new Date(post.frontmatter.date).toISOString()}
         </div>
