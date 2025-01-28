@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 * {
   /* https://developer.chrome.com/blog/css-i18n-features?hl=ja */
