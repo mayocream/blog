@@ -39,19 +39,18 @@ export default async function Page({
 
   return (
     <>
-      <aside
-        style={{
-          fontVariantEastAsian: post.frontmatter.lang === 'ja' ? 'simplified' : 'jis78',
-        }}
-      >
-        <div className="text-sm uppercase tracking-wider text-gray-500">
+      <aside>
+        <time className="text-sm uppercase tracking-wider text-gray-500">
           {new Date(post.frontmatter.date).toISOString()}
-        </div>
-        <h2 className="mt-4 text-4xl font-normal text-gray-900 group-hover:text-blue-600 transition-colors">
+        </time>
+        <h2
+          className="mt-4 text-4xl font-normal text-gray-900 group-hover:text-blue-600 transition-colors"
+          lang={post.frontmatter.lang ?? 'ja'}
+        >
           {post.frontmatter.title}
         </h2>
       </aside>
-      <Article raw={html} />
+      <Article raw={html} lang={post.frontmatter.lang ?? 'ja'} />
     </>
   )
 }

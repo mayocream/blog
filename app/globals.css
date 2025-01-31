@@ -8,6 +8,14 @@
   text-autospace: ideograph-alpha;
 }
 
+[lang^='zh'] {
+  font-variant-east-asian: simplified;
+}
+
+[lang='ja'] {
+  font-variant-east-asian: jis78;
+}
+
 /* Keywords */
 .hljs-keyword,
 .hljs-selector-tag,
